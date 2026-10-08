@@ -1,0 +1,2 @@
+# Create prisma.toml file
+echo 'datasourceUrl = "${DATABASE_URL}"' > prisma.toml

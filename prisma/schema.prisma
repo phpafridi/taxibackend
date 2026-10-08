@@ -1,0 +1,700 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model session {
+  id            String    @id @default(cuid())
+  sessionToken  String    @unique
+  userId        Int
+  expires       DateTime
+  deviceInfo    String?   @db.VarChar(500)
+  ipAddress     String?   @db.VarChar(45)
+  userAgent     String?   @db.VarChar(500)
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  user          user      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([sessionToken])
+  @@index([expires])
+  @@index([isActive])
+}
+
+model agreement {
+  id                                  Int              @id @default(autoincrement())
+  type                                agreement_type
+  driverId                            Int?
+  carId                               Int?
+  insuranceId                         Int?
+  insuranceNumber                     String?          @db.VarChar(50)
+  title                               String           @db.VarChar(255)
+  content                             String           @db.Text
+  terms                               String?          @db.Text
+  weeklyRate                          Decimal?         @db.Decimal(10, 2)
+  depositAmount                       Decimal?         @db.Decimal(10, 2)
+  depositPaid                         Boolean          @default(false)
+  startDate                           DateTime?
+  endDate                             DateTime?
+  dateIn                              DateTime?
+  signedAt                            DateTime?
+  terminatedAt                        DateTime?
+  signedByName                        String?          @db.VarChar(255)
+  signatureData                       String?          @db.Text
+  signatureOutData                    String?          @db.Text
+  signedByUserId                      Int?
+  createdBy                           Int?
+  status                              agreement_status @default(PENDING_SIGNATURE)
+  isActive                            Boolean          @default(true)
+  createdAt                           DateTime         @default(now())
+  updatedAt                           DateTime
+  car                                 car?             @relation(fields: [carId], references: [id], map: "Agreement_carId_fkey")
+  user_agreement_createdByTouser      user?            @relation("agreement_createdByTouser", fields: [createdBy], references: [id], map: "Agreement_createdBy_fkey")
+  driverprofile                       driverprofile?   @relation(fields: [driverId], references: [id], onDelete: Cascade, map: "Agreement_driverId_fkey") // FIXED: Added ?
+  insurance                           insurance?       @relation(fields: [insuranceId], references: [id], map: "Agreement_insuranceId_fkey")
+  user_agreement_signedByUserIdTouser user?            @relation("agreement_signedByUserIdTouser", fields: [signedByUserId], references: [id], map: "Agreement_signedByUserId_fkey")
+  document                            document[]
+  ledger                              ledger[]
+
+  // Damage checkboxes for Check-Out
+  damageOutMajorDamage  Boolean?        @default(false)
+  damageOutDent         Boolean?        @default(false)
+  damageOutScratch      Boolean?        @default(false)
+  damageOutMissing      Boolean?        @default(false)
+  damageOutChip         Boolean?        @default(false)
+  damageOutNotes        String?         @db.Text
+
+  // Damage checkboxes for Check-In
+  damageInMajorDamage   Boolean?        @default(false)
+  damageInDent          Boolean?        @default(false)
+  damageInScratch       Boolean?        @default(false)
+  damageInMissing       Boolean?        @default(false)
+  damageInChip          Boolean?        @default(false)
+  damageInNotes         String?         @db.Text
+
+  @@index([carId], map: "Agreement_carId_idx")
+  @@index([createdBy], map: "Agreement_createdBy_fkey")
+  @@index([driverId], map: "Agreement_driverId_idx")
+  @@index([endDate], map: "Agreement_endDate_idx")
+  @@index([insuranceId], map: "Agreement_insuranceId_fkey")
+  @@index([isActive], map: "Agreement_isActive_idx")
+  @@index([signedByUserId], map: "Agreement_signedByUserId_fkey")
+  @@index([startDate], map: "Agreement_startDate_idx")
+  @@index([status], map: "Agreement_status_idx")
+  @@index([type], map: "Agreement_type_idx")
+}
+
+model auditlog {
+  id            Int            @id @default(autoincrement())
+  userId        Int?
+  driverId      Int?
+  action        String         @db.VarChar(100)
+  entity        String         @db.VarChar(100)
+  entityId      Int?
+  oldValues     String?        @db.Text
+  newValues     String?        @db.Text
+  changes       String?        @db.Text
+  ipAddress     String?        @db.VarChar(45)
+  userAgent     String?        @db.Text
+  location      String?        @db.VarChar(255)
+  createdAt     DateTime       @default(now())
+  driverprofile driverprofile? @relation(fields: [driverId], references: [id], map: "AuditLog_driverId_fkey")
+  user          user?          @relation(fields: [userId], references: [id], map: "AuditLog_userId_fkey")
+
+  @@index([action], map: "AuditLog_action_idx")
+  @@index([createdAt], map: "AuditLog_createdAt_idx")
+  @@index([driverId], map: "AuditLog_driverId_idx")
+  @@index([entity, entityId], map: "AuditLog_entity_entityId_idx")
+  @@index([userId], map: "AuditLog_userId_idx")
+}
+
+model car {
+  id                 Int                  @id @default(autoincrement())
+  registration       String               @unique(map: "Car_registration_key") @db.VarChar(20)
+  model              String               @db.VarChar(100)
+  make               String               @db.VarChar(100)
+  year               Int?
+  color              String?              @db.VarChar(50)
+  bodyType           String?              @db.VarChar(50)
+  avatar             String?              @db.LongText      
+  purchasePrice      Decimal              @db.Decimal(12, 2)
+  purchaseDate       DateTime?
+  currentValue       Decimal?             @db.Decimal(12, 2)
+  isActive           Boolean              @default(true)
+  status             String               @default("AVAILABLE") @db.VarChar(50)
+  driverProfileId    Int?
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime
+  deletedAt          DateTime?
+  agreement          agreement[]
+  driverprofile      driverprofile?       @relation(fields: [driverProfileId], references: [id], map: "Car_driverProfileId_fkey")
+  document           document[]
+  insurance          insurance[]
+  ledger             ledger[]
+  maintenancerequest maintenancerequest[]
+  weeklypayment      weeklypayment[]
+  HIRE               Boolean              @default(false)
+  INSURANCE_C        Boolean              @default(false)
+  RS_RENTAL          Boolean              @default(false)
+
+  @@index([createdAt], map: "Car_createdAt_idx")
+  @@index([driverProfileId], map: "Car_driverProfileId_idx")
+  @@index([isActive], map: "Car_isActive_idx")
+  @@index([registration], map: "Car_registration_idx")
+  @@index([status], map: "Car_status_idx")
+}
+
+model document {
+  id                 Int                 @id @default(autoincrement())
+  type               document_type
+  name               String              @db.VarChar(255)
+  fileName           String              @db.VarChar(500)
+  fileUrl            String              @db.LongText
+  fileSize           Int?
+  mimeType           String?             @db.VarChar(100)
+  driverId           Int?
+  carId              Int?
+  insuranceId        Int?
+  maintenanceId      Int?
+  agreementId        Int?
+  description        String?             @db.Text
+  uploadedBy         Int?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime
+  agreement          agreement?          @relation(fields: [agreementId], references: [id], onDelete: Cascade, map: "Document_agreementId_fkey")
+  car                car?                @relation(fields: [carId], references: [id], onDelete: Cascade, map: "Document_carId_fkey")
+  driverprofile      driverprofile?      @relation(fields: [driverId], references: [id], onDelete: Cascade, map: "Document_driverId_fkey")
+  insurance          insurance?          @relation(fields: [insuranceId], references: [id], onDelete: Cascade, map: "Document_insuranceId_fkey")
+  maintenancerequest maintenancerequest? @relation(fields: [maintenanceId], references: [id], onDelete: Cascade, map: "Document_maintenanceId_fkey")
+  user               user?               @relation(fields: [uploadedBy], references: [id], map: "Document_uploadedBy_fkey")
+
+  @@index([agreementId], map: "Document_agreementId_fkey")
+  @@index([carId], map: "Document_carId_idx")
+  @@index([createdAt], map: "Document_createdAt_idx")
+  @@index([driverId], map: "Document_driverId_idx")
+  @@index([insuranceId], map: "Document_insuranceId_fkey")
+  @@index([maintenanceId], map: "Document_maintenanceId_fkey")
+  @@index([type], map: "Document_type_idx")
+  @@index([uploadedBy], map: "Document_uploadedBy_fkey")
+}
+
+model driverinsurancepayment {
+  id            Int                           @id @default(autoincrement())
+  insuranceId   Int
+  driverId      Int
+  amount        Decimal                       @db.Decimal(10, 2)
+  month         DateTime
+  dueDate       DateTime
+  status        driverinsurancepayment_status @default(PENDING)
+  paidAt        DateTime?
+  reference     String?                       @db.VarChar(100)
+  method        String?                       @db.VarChar(50)
+  createdAt     DateTime                      @default(now())
+  updatedAt     DateTime
+  driverprofile driverprofile                 @relation(fields: [driverId], references: [id], onDelete: Cascade, map: "DriverInsurancePayment_driverId_fkey")
+  insurance     insurance                     @relation(fields: [insuranceId], references: [id], onDelete: Cascade, map: "DriverInsurancePayment_insuranceId_fkey")
+  ledger        ledger[]
+
+  @@unique([insuranceId, month], map: "DriverInsurancePayment_insuranceId_month_key")
+  @@index([driverId], map: "DriverInsurancePayment_driverId_idx")
+  @@index([dueDate], map: "DriverInsurancePayment_dueDate_idx")
+  @@index([month], map: "DriverInsurancePayment_month_idx")
+  @@index([status], map: "DriverInsurancePayment_status_idx")
+}
+
+model driverprofile {
+  id                                  Int                      @id @default(autoincrement())
+  userId                              Int                      @unique(map: "DriverProfile_userId_key")
+  driverNumber_licenseNumber          String?                  @db.VarChar(50)
+  driverNumber_licenseExpiry          DateTime?
+  licenseNumber                       String?                  @db.VarChar(50)
+  licenseExpiry                       DateTime?
+  address                             String?                  @db.Text
+  postcode                            String?                  @db.VarChar(20)
+  emergencyContact                    String?                  @db.VarChar(100)
+  emergencyPhone                      String?                  @db.VarChar(20)
+  dateOfBirth                         DateTime?
+  nationalInsuranceNumber             String?                  @db.VarChar(50)
+  weeklyAmount                        Decimal                  @db.Decimal(10, 2)
+  depositPaid                         Decimal?                 @default(0.00) @db.Decimal(10, 2)
+  isActive                            Boolean                  @default(true)
+  isVerified                          Boolean                  @default(false)
+  verifiedAt                          DateTime?
+  verifiedBy                          Int?
+  agreementSigned                     Boolean                  @default(false)
+  agreementSignedAt                   DateTime?
+  createdAt                           DateTime                 @default(now())
+  updatedAt                           DateTime
+  deletedAt                           DateTime?
+  agreement                           agreement[]
+  auditlog                            auditlog[]
+  car                                 car[]
+  document                            document[]
+  driverinsurancepayment              driverinsurancepayment[]
+  user_driverprofile_userIdTouser     user                     @relation("driverprofile_userIdTouser", fields: [userId], references: [id], onDelete: Cascade, map: "DriverProfile_userId_fkey")
+  user_driverprofile_verifiedByTouser user?                    @relation("driverprofile_verifiedByTouser", fields: [verifiedBy], references: [id], map: "DriverProfile_verifiedBy_fkey")
+  insurance                           insurance[]
+  ledger                              ledger[]
+  maintenancerequest                  maintenancerequest[]
+  notification                        notification[]
+  otp                                 otp[]
+  weeklypayment                       weeklypayment[]
+  FcmTokens          fcmToken[]     @relation("DriverFcmTokens")
+  driverlocation     driverlocation?
+
+  @@index([createdAt], map: "DriverProfile_createdAt_idx")
+  @@index([isActive], map: "DriverProfile_isActive_idx")
+  @@index([isVerified], map: "DriverProfile_isVerified_idx")
+  @@index([licenseNumber], map: "DriverProfile_licenseNumber_idx")
+  @@index([userId], map: "DriverProfile_userId_idx")
+  @@index([verifiedBy], map: "DriverProfile_verifiedBy_fkey")
+}
+
+model insurance {
+  id                     Int                      @id @default(autoincrement())
+  carId                  Int
+  driverId               Int?
+  provider               String                   @db.VarChar(255)
+  policyNo               String?                  @unique(map: "Insurance_policyNo_key") @db.VarChar(100)
+  certificateNo          String?                  @db.VarChar(100)
+  startDate              DateTime
+  endDate                DateTime
+  renewalDate            DateTime?
+  yearlyCost             Decimal?                 @db.Decimal(10, 2)
+  monthlyCharge          Decimal?                 @db.Decimal(10, 2)
+  excessAmount           Decimal?                 @db.Decimal(10, 2)
+  coverageType           String?                  @db.VarChar(100)
+  notes                  String?                  @db.Text
+  isActive               Boolean                  @default(true)
+  isExpired              Boolean                  @default(false)
+  createdAt              DateTime                 @default(now())
+  updatedAt              DateTime
+  agreement              agreement[]
+  document               document[]
+  driverinsurancepayment driverinsurancepayment[]
+  car                    car                      @relation(fields: [carId], references: [id], onDelete: Cascade, map: "Insurance_carId_fkey")
+  driverprofile          driverprofile?           @relation(fields: [driverId], references: [id], map: "Insurance_driverId_fkey")
+  ownerinsurancepayment  ownerinsurancepayment[]
+
+  @@unique([carId, startDate], map: "Insurance_carId_startDate_key")
+  @@index([carId], map: "Insurance_carId_idx")
+  @@index([driverId], map: "Insurance_driverId_idx")
+  @@index([endDate], map: "Insurance_endDate_idx")
+  @@index([isActive], map: "Insurance_isActive_idx")
+  @@index([renewalDate], map: "Insurance_renewalDate_idx")
+}
+
+model ledger {
+  id                     Int                     @id @default(autoincrement())
+  ownerType              ledger_ownerType
+  status                 String?                @db.VarChar(50) @default("ACCEPT")
+  ownerId                Int
+  carId                  Int?
+  driverId               Int?
+  agreementId            Int?
+  maintenanceId          Int?
+  insurancePaymentId     Int?
+  weeklyPaymentId        Int?
+  category               ledger_category
+  direction              ledger_direction
+  amount                 Decimal                 @db.Decimal(12, 2)
+  referenceId            Int?
+  referenceType          String?                 @db.VarChar(100)
+  description            String?                 @db.Text
+  balanceBefore          Decimal?                @db.Decimal(12, 2)
+  balanceAfter           Decimal?                @db.Decimal(12, 2)
+  paymentMethod          String?                 @db.VarChar(50)
+  paymentDate            DateTime?
+  isReconciled           Boolean                 @default(false)
+  createdBy              Int?
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime
+  agreement              agreement?              @relation(fields: [agreementId], references: [id], map: "Ledger_agreementId_fkey")
+  car                    car?                    @relation(fields: [carId], references: [id], map: "Ledger_carId_fkey")
+  user                   user?                   @relation(fields: [createdBy], references: [id], map: "Ledger_createdBy_fkey")
+  driverprofile          driverprofile?          @relation(fields: [driverId], references: [id], map: "Ledger_driverId_fkey")
+  driverinsurancepayment driverinsurancepayment? @relation(fields: [insurancePaymentId], references: [id], map: "Ledger_insurancePaymentId_fkey")
+  maintenancerequest     maintenancerequest?     @relation(fields: [maintenanceId], references: [id], map: "Ledger_maintenanceId_fkey")
+  weeklypayment          weeklypayment?          @relation(fields: [weeklyPaymentId], references: [id], map: "Ledger_weeklyPaymentId_fkey")
+
+  @@index([agreementId], map: "Ledger_agreementId_fkey")
+  @@index([carId], map: "Ledger_carId_idx")
+  @@index([category], map: "Ledger_category_idx")
+  @@index([createdAt], map: "Ledger_createdAt_idx")
+  @@index([createdBy], map: "Ledger_createdBy_fkey")
+  @@index([direction], map: "Ledger_direction_idx")
+  @@index([driverId], map: "Ledger_driverId_idx")
+  @@index([insurancePaymentId], map: "Ledger_insurancePaymentId_fkey")
+  @@index([isReconciled], map: "Ledger_isReconciled_idx")
+  @@index([maintenanceId], map: "Ledger_maintenanceId_fkey")
+  @@index([ownerType, ownerId], map: "Ledger_ownerType_ownerId_idx")
+  @@index([paymentDate], map: "Ledger_paymentDate_idx")
+  @@index([referenceType, referenceId], map: "Ledger_referenceType_referenceId_idx")
+  @@index([weeklyPaymentId], map: "Ledger_weeklyPaymentId_fkey")
+}
+
+model maintenancerequest {
+  id              Int                       @id @default(autoincrement())
+  carId           Int
+  driverId        Int
+  title           String                    @db.VarChar(255)
+  description     String                    @db.Text
+  mileage         Int?
+  amount          Decimal                   @db.Decimal(10, 2)
+  estimatedAmount Decimal?                  @db.Decimal(10, 2)
+  status          maintenancerequest_status @default(PENDING)
+  approvedBy      Int?
+  approvedAt      DateTime?
+  approvedAmount  Decimal?                  @db.Decimal(10, 2)
+  rejectionReason String?                   @db.Text
+  completedAt     DateTime?
+  paidAt          DateTime?
+  garageName      String?                   @db.VarChar(255)
+  garageContact   String?                   @db.VarChar(100)
+  notes           String?                   @db.Text
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime
+  document        document[]
+  ledger          ledger[]
+  user            user?                     @relation(fields: [approvedBy], references: [id], map: "MaintenanceRequest_approvedBy_fkey")
+  car             car                       @relation(fields: [carId], references: [id], onDelete: Cascade, map: "MaintenanceRequest_carId_fkey")
+  driverprofile   driverprofile             @relation(fields: [driverId], references: [id], onDelete: Cascade, map: "MaintenanceRequest_driverId_fkey")
+
+  @@index([approvedBy], map: "MaintenanceRequest_approvedBy_fkey")
+  @@index([carId], map: "MaintenanceRequest_carId_idx")
+  @@index([createdAt], map: "MaintenanceRequest_createdAt_idx")
+  @@index([driverId], map: "MaintenanceRequest_driverId_idx")
+  @@index([status, createdAt], map: "MaintenanceRequest_status_createdAt_idx")
+  @@index([status], map: "MaintenanceRequest_status_idx")
+}
+
+model notification {
+  id            Int               @id @default(autoincrement())
+  userId        Int?
+  driverId      Int?
+  type          notification_type
+  priority      String            @default("MEDIUM") @db.VarChar(20)
+  title         String            @db.VarChar(255)
+  message       String            @db.Text
+  actionUrl     String?           @db.VarChar(500)
+  referenceType String?           @db.VarChar(100)
+  referenceId   Int?
+  isForAdmin    Boolean           @default(false)
+  isRead        Boolean           @default(false)
+  readAt        DateTime?
+  metadata      String?           @db.Text
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime
+  driverprofile driverprofile?    @relation(fields: [driverId], references: [id], onDelete: Cascade, map: "Notification_driverId_fkey")
+  user          user?             @relation(fields: [userId], references: [id], onDelete: Cascade, map: "Notification_userId_fkey")
+
+  @@index([createdAt], map: "Notification_createdAt_idx")
+  @@index([driverId, isRead], map: "Notification_driverId_isRead_idx")
+  @@index([priority], map: "Notification_priority_idx")
+  @@index([referenceType, referenceId], map: "Notification_referenceType_referenceId_idx")
+  @@index([type], map: "Notification_type_idx")
+  @@index([userId, isRead], map: "Notification_userId_isRead_idx")
+}
+
+model fcmToken {
+  id        Int      @id @default(autoincrement())
+  token     String   @unique @db.VarChar(500)
+  userId    Int?     
+  driverId  Int?
+  platform  String?  @db.VarChar(50)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+user   user?          @relation(name: "UserFcmTokens", fields: [userId], references: [id], map: "FcmToken_userId_fkey")
+  driver driverprofile? @relation(name: "DriverFcmTokens", fields: [driverId], references: [id], map: "FcmToken_driverId_fkey")
+
+  @@index([userId])
+  @@index([driverId])
+}
+
+
+
+model driverlocation {
+  id           Int           @id @default(autoincrement())
+  driverId     Int           @unique
+  latitude     Float
+  longitude    Float
+  accuracy     Float?
+  gpsEnabled   Boolean       @default(true)
+  isTracked    Boolean       @default(false) // admin toggled — driver reports only when true
+  recordedAt   DateTime      // when the device captured this fix
+  updatedAt    DateTime      @updatedAt
+  driverprofile driverprofile @relation(fields: [driverId], references: [id], onDelete: Cascade, map: "DriverLocation_driverId_fkey")
+
+  @@index([driverId])
+}
+
+model otp {
+  id            Int            @id @default(autoincrement())
+  userId        Int?
+  driverId      Int?
+  email         String?        @db.VarChar(255)
+  phone         String?        @db.VarChar(20)
+  code          String         @db.VarChar(10)
+  type          String         @db.VarChar(50)
+  expiresAt     DateTime
+  used          Boolean        @default(false)
+  usedAt        DateTime?
+  createdAt     DateTime       @default(now())
+  driverprofile driverprofile? @relation(fields: [driverId], references: [id], map: "OTP_driverId_fkey")
+  user          user?          @relation(fields: [userId], references: [id], map: "OTP_userId_fkey")
+
+  @@index([code], map: "OTP_code_idx")
+  @@index([driverId], map: "OTP_driverId_idx")
+  @@index([email], map: "OTP_email_idx")
+  @@index([expiresAt], map: "OTP_expiresAt_idx")
+  @@index([phone], map: "OTP_phone_idx")
+  @@index([type], map: "OTP_type_idx")
+  @@index([used], map: "OTP_used_idx")
+  @@index([userId], map: "OTP_userId_idx")
+}
+
+model ownerinsurancepayment {
+  id          Int       @id @default(autoincrement())
+  insuranceId Int
+  amount      Decimal   @db.Decimal(10, 2)
+  paymentDate DateTime  @default(now())
+  reference   String?   @db.VarChar(100)
+  method      String?   @db.VarChar(50)
+  description String?   @db.Text
+  createdBy   Int?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime
+  user        user?     @relation(fields: [createdBy], references: [id], map: "OwnerInsurancePayment_createdBy_fkey")
+  insurance   insurance @relation(fields: [insuranceId], references: [id], onDelete: Cascade, map: "OwnerInsurancePayment_insuranceId_fkey")
+
+  @@index([createdAt], map: "OwnerInsurancePayment_createdAt_idx")
+  @@index([createdBy], map: "OwnerInsurancePayment_createdBy_fkey")
+  @@index([insuranceId], map: "OwnerInsurancePayment_insuranceId_idx")
+  @@index([paymentDate], map: "OwnerInsurancePayment_paymentDate_idx")
+}
+
+model passwordreset {
+  id        Int       @id @default(autoincrement())
+  userId    Int
+  token     String    @unique(map: "PasswordReset_token_key") @db.VarChar(255)
+  email     String    @db.VarChar(255)
+  expiresAt DateTime
+  used      Boolean   @default(false)
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      user      @relation(fields: [userId], references: [id], onDelete: Cascade, map: "PasswordReset_userId_fkey")
+
+  @@index([email], map: "PasswordReset_email_idx")
+  @@index([expiresAt], map: "PasswordReset_expiresAt_idx")
+  @@index([token], map: "PasswordReset_token_idx")
+  @@index([used], map: "PasswordReset_used_idx")
+  @@index([userId], map: "PasswordReset_userId_idx")
+}
+
+model systemsetting {
+  id                                 Int      @id @default(autoincrement())
+  key                                String   @unique(map: "SystemSetting_key_key") @db.VarChar(100)
+  value                              String   @db.Text
+  group                              String   @db.VarChar(50)
+  type                               String   @default("STRING") @db.VarChar(20)
+  isPublic                           Boolean  @default(false)
+  notes                              String?  @db.Text
+  createdBy                          Int?
+  updatedBy                          Int?
+  createdAt                          DateTime @default(now())
+  updatedAt                          DateTime
+  user_systemsetting_createdByTouser user?    @relation("systemsetting_createdByTouser", fields: [createdBy], references: [id], map: "SystemSetting_createdBy_fkey")
+  user_systemsetting_updatedByTouser user?    @relation("systemsetting_updatedByTouser", fields: [updatedBy], references: [id], map: "SystemSetting_updatedBy_fkey")
+
+  @@index([createdBy], map: "SystemSetting_createdBy_fkey")
+  @@index([group], map: "SystemSetting_group_idx")
+  @@index([key], map: "SystemSetting_key_idx")
+  @@index([updatedBy], map: "SystemSetting_updatedBy_fkey")
+}
+
+model user {
+  id                                           Int                     @id @default(autoincrement())
+  name                                         String                  @db.VarChar(255)
+  avatar                                       String?                 @db.LongText            
+  email                                        String                  @unique(map: "User_email_key") @db.VarChar(255)
+  phone                                        String?                 @db.VarChar(20)
+  password                                     String                  @db.VarChar(255)
+  role                                         user_role
+  isActive                                     Boolean                 @default(true)
+  lastLogin                                    DateTime?
+  failedLoginAttempts                          Int                     @default(0)
+  lockedUntil                                  DateTime?
+  createdAt                                    DateTime                @default(now())
+  updatedAt                                    DateTime
+  deletedAt                                    DateTime?
+  agreement_agreement_createdByTouser          agreement[]             @relation("agreement_createdByTouser")
+  agreement_agreement_signedByUserIdTouser     agreement[]             @relation("agreement_signedByUserIdTouser")
+  auditlog                                     auditlog[]
+  document                                     document[]
+  driverprofile_driverprofile_userIdTouser     driverprofile?          @relation("driverprofile_userIdTouser")
+  driverprofile_driverprofile_verifiedByTouser driverprofile[]         @relation("driverprofile_verifiedByTouser")
+  ledger                                       ledger[]
+  sessions                                     session[]
+  maintenancerequest                           maintenancerequest[]
+  notification                                 notification[]
+  otp                                          otp[]
+  ownerinsurancepayment                        ownerinsurancepayment[]
+  passwordreset                                passwordreset[]
+  systemsetting_systemsetting_createdByTouser  systemsetting[]         @relation("systemsetting_createdByTouser")
+  systemsetting_systemsetting_updatedByTouser  systemsetting[]         @relation("systemsetting_updatedByTouser")
+  HIRE                                         Boolean                 @default(false)
+  INSURANCE_C                                  Boolean                 @default(false)
+  RS_RENTAL                                    Boolean                 @default(false)
+
+  FcmTokens          fcmToken[]     @relation("UserFcmTokens")
+
+  @@index([createdAt], map: "User_createdAt_idx")
+  @@index([email], map: "User_email_idx")
+  @@index([isActive], map: "User_isActive_idx")
+  @@index([role], map: "User_role_idx")
+  
+}
+
+model weeklypayment {
+  id            Int                  @id @default(autoincrement())
+  carId         Int
+  driverId      Int
+  amount        Decimal              @db.Decimal(10, 2)
+  weekStart     DateTime
+  weekEnd       DateTime
+  dueDate       DateTime
+  status        weeklypayment_status @default(PENDING)
+  paidAt        DateTime?
+  reference     String?              @db.VarChar(100)
+  method        String?              @db.VarChar(50)
+  notes         String?              @db.Text
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime
+  ledger        ledger[]
+  car           car                  @relation(fields: [carId], references: [id], onDelete: Cascade, map: "WeeklyPayment_carId_fkey")
+  driverprofile driverprofile        @relation(fields: [driverId], references: [id], onDelete: Cascade, map: "WeeklyPayment_driverId_fkey")
+
+  @@unique([driverId, weekStart], map: "WeeklyPayment_driverId_weekStart_key")
+  @@index([carId], map: "WeeklyPayment_carId_idx")
+  @@index([driverId], map: "WeeklyPayment_driverId_idx")
+  @@index([dueDate], map: "WeeklyPayment_dueDate_idx")
+  @@index([status], map: "WeeklyPayment_status_idx")
+  @@index([status, weekStart], map: "WeeklyPayment_status_weekStart_idx")
+  @@index([weekStart], map: "WeeklyPayment_weekStart_idx")
+}
+
+enum ledger_status {
+   ACCEPT
+   PENDING
+   REJECTED
+}
+
+enum agreement_type {
+  HIRE_AGREEMENT
+  INSURANCE_CERTIFICATE
+  RS_CAR_RENTAL
+}
+
+enum document_type {
+  AGREEMENT
+  INVOICE
+  RECEIPT
+  INSURANCE_CERTIFICATE
+  MAINTENANCE_INVOICE
+  LICENSE
+  OTHER
+}
+
+enum ledger_ownerType {
+  OWNER
+  DRIVER
+  COMPANY
+}
+
+enum notification_type {
+  INSURANCE_EXPIRY
+  MAINTENANCE_REQUEST
+  MAINTENANCE_APPROVED
+  MAINTENANCE_REJECTED
+  WEEKLY_PAYMENT_DUE
+  WEEKLY_PAYMENT_MISSED
+  WEEKLY_PAYMENT_PAID
+  SYSTEM
+  LEDGER_UPDATE
+  AGREEMENT_SIGNED
+  AGREEMENT_EXPIRING
+  AGREEMENT_EXPIRED
+}
+
+enum driverinsurancepayment_status {
+  PENDING
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum user_role {
+  ADMIN
+  DRIVER
+}
+
+enum maintenancerequest_status {
+  PENDING
+  APPROVED
+  REJECTED
+  IN_PROGRESS
+  COMPLETED
+  PAID
+  CANCELLED
+}
+
+enum weeklypayment_status {
+  PENDING
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum ledger_category {
+  CAR_PURCHASE
+  INSURANCE
+  INSURANCE_DRIVER_PAYMENT
+  WEEKLY_INCOME
+  MAINTENANCE_EXPENSE
+  MAINTENANCE_REIMBURSEMENT
+  ADJUSTMENT
+  REFUND
+  DEPOSIT
+  FINE
+  OTHER
+}
+
+enum ledger_direction {
+  CREDIT
+  DEBIT
+}
+
+enum agreement_status {
+  DRAFT
+  PENDING_SIGNATURE
+  SIGNED
+  EXPIRED
+  TERMINATED
+  CANCELLED
+}
+
+
+// Receipt photo attached to a ledger entry (kept in its own table so ordinary ledger queries stay light).
+model ledgerproof {
+  id        Int      @id @default(autoincrement())
+  ledgerId  Int      @unique
+  image     String   @db.MediumText
+  createdAt DateTime @default(now())
+}

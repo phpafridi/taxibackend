@@ -54,6 +54,11 @@ function afterWrite(model: string, operation: string, result: unknown) {
     } else if (row.driverId != null) {
       emitRealtime(`${model}:${op}`, row, { toDriverId: row.driverId as number });
     }
+
+    // Safety net: a data-free "something changed" ping to every driver phone. Drivers only
+    // refetch (the API still decides what each one may see), so nothing private is sent, and
+    // it still works if a driver's personal room was not joined yet.
+    if (model !== "car") emitRealtime(`${model}:${op}`, { id: row.id }, { toDrivers: true });
   }
 }
 

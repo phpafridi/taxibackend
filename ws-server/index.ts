@@ -149,7 +149,7 @@ io.on("connection", (socket) => {
     // maintenance etc. reach their phone live.
     prisma.driverprofile
       .findFirst({ where: { userId }, select: { id: true } })
-      .then((dp) => { if (dp) { socket.data.driverId = dp.id; socket.join(`driver:${dp.id}`); } })
+      .then((dp) => { if (dp) { socket.data.driverId = dp.id; socket.join(`driver:${dp.id}`); console.log(`[ws-server] driver room joined: user=${userId} driver=${dp.id}`); } else { console.warn(`[ws-server] no driver profile for user=${userId}`); } })
       .catch((err) => console.error("[ws-server] driver room join failed:", err));
   }
 

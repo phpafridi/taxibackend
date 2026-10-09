@@ -80,7 +80,19 @@ function createPrismaClient() {
           args: unknown;
           query: (args: unknown) => Promise<unknown>;
         }) {
-          const result = await query(args);
+          // MySQL closes idle connections; the first query after a quiet spell can hit a dead one and fail with a
+          // vague "unknown error". Try once more on a fresh connection — the failed attempt never reached the table.
+          let result: unknown;
+          try {
+            result = await query(args);
+          } catch (err) {
+            const e = err as { code?: string; message?: string };
+            const transient = ["P1001", "P1002", "P1008", "P1017", "P2024"].includes(e?.code ?? "")
+              || /unknown error|server has closed the connection|connection (was )?(reset|closed|lost)|ECONNRESET|ETIMEDOUT|EPIPE|socket/i.test(e?.message ?? "");
+            if (!transient) throw err;
+            await new Promise((r) => setTimeout(r, 250));
+            result = await query(args);
+          }
           try {
             if (model) afterWrite(model.toLowerCase(), operation, result);
           } catch (err) {

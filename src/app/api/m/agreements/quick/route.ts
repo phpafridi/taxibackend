@@ -100,6 +100,15 @@ async function handle(g: { ok: true; user: { id: number } }, body: Record<string
     await prisma.car.update({ where: { id: carId }, data: { driverProfileId: driverId, status: "RESERVED" as never, ...(rs ? { RS_RENTAL: true } : { HIRE: true }), updatedAt: now } as never }).catch(() => {});
     await prisma.user.update({ where: { id: dp.userId }, data: rs ? { RS_RENTAL: true } : { HIRE: true } as never }).catch(() => {});
 
+    // Insurance certificates the driver holds for the car(s) being handed back — they move to the new car.
+    const oldCarIds = others.map((o) => o.carId).filter((x): x is number => typeof x === "number");
+    const oldIns = oldCarIds.length
+      ? await prisma.agreement.findMany({
+          where: { driverId, type: "INSURANCE_CERTIFICATE", carId: { in: oldCarIds }, status: { in: LIVE } } as never,
+          select: { id: true, insuranceNumber: true },
+        }) as unknown as { id: number; insuranceNumber: string | null }[]
+      : [];
+
     // ── Swap: only now that the new agreement exists, end the old one(s) and free the old car(s) ──
     for (const old of others) {
       await prisma.agreement.update({
@@ -128,6 +137,13 @@ async function handle(g: { ok: true; user: { id: number } }, body: Record<string
       }).catch(() => {});
     }
 
+    // Carry the insurance certificate over to the new car (same policy number), sent the same way as the new agreement.
+    let insuranceRenewed: number | null = null;
+    if (oldIns.length) {
+      const r = await insurance(g, { insuranceNumber: oldIns[0].insuranceNumber ?? undefined, send }, driverId, carId).catch(() => null);
+      if (r && r.status === 201) { const j = await r.json().catch(() => null) as { agreement?: { id: number } } | null; insuranceRenewed = j?.agreement?.id ?? null; }
+    }
+
     if (send) {
       await prisma.notification.create({
         data: { type: "AGREEMENT_SIGNED" as never, title: "Agreement Ready to Sign", message: `Your agreement "${row.title}" is ready for your signature.`, referenceType: "agreement", referenceId: row.id, isForAdmin: false, driverId, updatedAt: now } as never,
@@ -143,7 +159,7 @@ async function handle(g: { ok: true; user: { id: number } }, body: Record<string
     if (weeklyRate == null) missing.push("weekly rate");
     if (!c.bodyType) missing.push("body type");
 
-    return NextResponse.json({ agreement: serializeAgreement(row as never), released, missing }, { status: 201 });
+    return NextResponse.json({ agreement: serializeAgreement(row as never), released, missing, insuranceRenewed }, { status: 201 });
   }
 }
 

@@ -226,7 +226,7 @@ export function serializeMaintenance(m: AnyRec) {
     garageContact: (m.garageContact as string) ?? undefined,
     notes: (m.notes as string) ?? undefined,
     createdAt: isoReq(m.createdAt as Date),
-    car: car ? { id: car.id, registration: car.registration, model: car.model, make: car.make, year: car.year ?? undefined } : undefined,
+    car: car ? { id: car.id, registration: car.registration, model: car.model, make: car.make, year: car.year ?? undefined, bodyType: (car.bodyType as string) ?? undefined } : undefined,
     driverprofile: dp ? serializeDriverProfile(dp) : undefined,
     photos: docs.map((d) => ({
       id: d.id as number,

@@ -25,12 +25,25 @@ export async function POST(req: Request) {
   }
 
   const user = await prisma.user.findUnique({ where: { email } });
-  if (!user || !user.password || !user.isActive) {
+  if (!user || !user.password) {
     return NextResponse.json({ message: "Invalid email or password" }, { status: 401 });
   }
   const ok = await bcrypt.compare(password, user.password);
   if (!ok) {
     await recordLoginFailure(email);
+    return NextResponse.json({ message: "Invalid email or password" }, { status: 401 });
+  }
+  if (!user.isActive) {
+    // A driver whose application is still being reviewed (or was declined) gets a clear status
+    // instead of a generic error. Only revealed after the password was correct.
+    const dp = user.role === "DRIVER"
+      ? await prisma.driverprofile.findUnique({ where: { userId: user.id }, select: { applicationStatus: true, rejectionReason: true } })
+      : null;
+    const st = (dp as { applicationStatus?: string | null } | null)?.applicationStatus;
+    if (st === "PENDING")
+      return NextResponse.json({ code: "APPLICATION_PENDING", message: "Your application is being reviewed." }, { status: 403 });
+    if (st === "REJECTED")
+      return NextResponse.json({ code: "APPLICATION_REJECTED", message: "Your application was not approved.", reason: (dp as { rejectionReason?: string | null }).rejectionReason ?? null }, { status: 403 });
     return NextResponse.json({ message: "Invalid email or password" }, { status: 401 });
   }
   await recordLoginSuccess(email);

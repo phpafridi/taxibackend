@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { writeBackAgreementDetails } from "../../../../../lib/agreement-helpers";
 import { prisma, requireUser, requireAdmin, driverProfileIdFor, pageParams, paginated, qstr, serializeAgreement, driverUserInclude, carBasicSelect, fail } from "../../../../../lib/mobile-api";
 
 const inc = { car: { select: carBasicSelect }, driverprofile: { include: driverUserInclude } };
@@ -57,6 +58,8 @@ export async function POST(req: Request) {
       },
       include: inc,
     });
+
+    await writeBackAgreementDetails(driverId, carId, body);
 
     // Mark the car/driver as provisionally occupied by this draft, same as
     // the web dashboard does on create — keeps mobile-created agreements

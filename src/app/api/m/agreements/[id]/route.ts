@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { writeBackAgreementDetails } from "../../../../../../lib/agreement-helpers";
 import { prisma, requireUser, requireAdmin, driverProfileIdFor, serializeAgreement, driverUserInclude, carBasicSelect, fail, sendExpoPush, getTokensForUsers } from "../../../../../../lib/mobile-api";
 
 const inc = { car: { select: carBasicSelect }, driverprofile: { include: driverUserInclude } };
@@ -37,6 +38,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       Object.keys(body).some((k) => k !== "status")
     ) {
       return NextResponse.json({ message: `Agreement cannot be edited. Current status: "${current.status}".` }, { status: 400 });
+    }
+
+    // A signed agreement can be corrected, but not moved to another driver/car — use the car swap for that
+    // (otherwise the car's status and the driver's flags would be left pointing at the wrong place).
+    if (current.status === "SIGNED") {
+      const r = row as unknown as { driverId: number | null; carId: number | null };
+      if ((body.driverId != null && Number(body.driverId) !== r.driverId) || (body.carId != null && Number(body.carId) !== r.carId))
+        return NextResponse.json({ message: "A signed agreement can't be moved to a different driver or car. Use New agreement / swap car instead." }, { status: 400 });
     }
 
     // Build the update payload from whatever fields were actually sent —
@@ -82,11 +91,25 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       await prisma.driverprofile.update({ where: { id: nextDriverId }, data: { nationalInsuranceNumber: String(body.nationalInsuranceNumber) } }).catch(() => {});
     }
 
+    await writeBackAgreementDetails(
+      (body.driverId !== undefined ? (data.driverId as number | null) : (row as any).driverId) ?? null,
+      (body.carId !== undefined ? (data.carId as number | null) : (row as any).carId) ?? null,
+      body,
+    );
+
     const updated = await prisma.agreement.update({
       where: { id: Number(id) },
       data: data as never,
       include: inc,
     });
+
+    // Admin corrected an agreement after it was signed — keep a trail.
+    if (current.status === "SIGNED" && Object.keys(body).some((k) => k !== "status")) {
+      await prisma.auditlog.create({
+        data: { userId: g.ok ? g.user.id : null, driverId: (row as any).driverId ?? null, action: "AGREEMENT_EDITED_AFTER_SIGNING", entity: "agreement", entityId: Number(id),
+          changes: JSON.stringify(Object.keys(body)), newValues: JSON.stringify({ weeklyRate: body.weeklyRate, depositAmount: body.depositAmount, startDate: body.startDate, endDate: body.endDate }) } as never,
+      }).catch(() => {});
+    }
 
     // If sending to driver (DRAFT → PENDING_SIGNATURE), create notification + push
     if (body.status === "PENDING_SIGNATURE" && (row as any).driverId) {

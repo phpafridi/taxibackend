@@ -10,7 +10,8 @@ export async function GET(req: Request) {
     const isActive = qstr(sp, "isActive");
     const isVerified = qstr(sp, "isVerified");
     const eligibleForAgreement = qstr(sp, "eligibleForAgreement");
-    const where: Record<string, unknown> = { deletedAt: null };
+    // Applicants (PENDING / REJECTED) live in the Applications screen, not the drivers list.
+    const where: Record<string, unknown> = { deletedAt: null, AND: [{ OR: [{ applicationStatus: null }, { applicationStatus: "APPROVED" }] }] };
     if (isActive === "true" || isActive === "false") where.isActive = isActive === "true";
     if (isVerified === "true" || isVerified === "false") where.isVerified = isVerified === "true";
     if (search) where.OR = [

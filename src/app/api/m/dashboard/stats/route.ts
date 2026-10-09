@@ -22,7 +22,7 @@ export async function GET(req: Request) {
     const dpid = isAdmin ? null : await driverProfileIdFor(g.user.id);
     const carWhere = isAdmin ? { deletedAt: null } : { deletedAt: null, driverProfileId: dpid ?? -1 };
     const dWhere = (extra: Record<string, unknown> = {}) => (isAdmin ? extra : { ...extra, driverId: dpid ?? -1 });
-    const dpWhere = isAdmin ? { deletedAt: null } : { deletedAt: null, id: dpid ?? -1 };
+    const dpWhere = isAdmin ? { deletedAt: null, AND: [{ OR: [{ applicationStatus: null }, { applicationStatus: "APPROVED" }] }] } : { deletedAt: null, id: dpid ?? -1 };
 
     const [
       carsTotal, carsAvailable, carsAssigned, carsMaintenance, carsRented,
@@ -55,7 +55,10 @@ export async function GET(req: Request) {
       safe(prisma.agreement.count({ where: dWhere({ isActive: true, endDate: { gte: now, lte: in30 } }) }), 0),
     ]);
 
+    const pendingApplications = isAdmin ? await safe(prisma.driverprofile.count({ where: { applicationStatus: "PENDING" } as never }), 0) : 0;
+
     return NextResponse.json({
+      pendingApplications,
       cars: { total: carsTotal, available: carsAvailable, assigned: carsAssigned, maintenance: carsMaintenance },
       drivers: { total: driversTotal, active: driversActive, verified: driversVerified, unverified: Math.max(0, driversTotal - driversVerified) },
       payments: {

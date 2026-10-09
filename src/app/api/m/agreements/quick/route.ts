@@ -13,7 +13,7 @@ const day = (d: Date) => d.toISOString().split("T")[0];
 const inFlight = new Set<string>();
 
 export async function POST(req: Request) {
-  const g = await requireUser(req); const forbidden = requireAdmin(g); if (forbidden || !g.ok) return forbidden;
+  const g = await requireUser(req); const forbidden = requireAdmin(g); if (forbidden) return forbidden; if (!g.ok) return g.res;
   const body = await req.json().catch(() => ({} as Record<string, unknown>));
   const lockKey = `${body.driverId}:${body.carId}`;
   if (inFlight.has(lockKey)) return NextResponse.json({ message: "Already working on this — please wait a moment" }, { status: 409 });

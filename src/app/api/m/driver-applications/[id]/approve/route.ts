@@ -4,7 +4,7 @@ import { prisma, requireUser, requireAdmin, fail } from "../../../../../../../li
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const g = await requireUser(req); const forbidden = requireAdmin(g); if (forbidden || !g.ok) return forbidden;
+    const g = await requireUser(req); const forbidden = requireAdmin(g); if (forbidden) return forbidden; if (!g.ok) return g.res;
     const { id } = await params;
     const body = await req.json().catch(() => ({} as Record<string, unknown>));
     const dp = await prisma.driverprofile.findUnique({ where: { id: Number(id) } });

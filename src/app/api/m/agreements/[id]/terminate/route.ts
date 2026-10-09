@@ -1,6 +1,19 @@
 import { NextResponse } from "next/server";
 import { prisma, requireUser, requireAdmin, serializeAgreement, driverUserInclude, carBasicSelect, fail, sendExpoPush, getTokensForUsers } from "../../../../../../../lib/mobile-api";
 
+// When the car goes back to the pool, an insurance certificate for that driver + car no longer applies.
+async function endInsuranceFor(driverId: number, carId: number, now: Date) {
+  await prisma.agreement.updateMany({
+    where: { driverId, carId, type: "INSURANCE_CERTIFICATE", status: { in: ["DRAFT", "PENDING_SIGNATURE"] } } as never,
+    data: { status: "CANCELLED" as never, isActive: false, updatedAt: now } as never,
+  }).catch(() => {});
+  await prisma.agreement.updateMany({
+    where: { driverId, carId, type: "INSURANCE_CERTIFICATE", status: "SIGNED" } as never,
+    data: { status: "TERMINATED" as never, isActive: false, terminatedAt: now, updatedAt: now } as never,
+  }).catch(() => {});
+  await prisma.car.update({ where: { id: carId }, data: { INSURANCE_C: false, updatedAt: now } as never }).catch(() => {});
+}
+
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const g = await requireUser(req); const adminErr = requireAdmin(g); if (adminErr) return adminErr;
@@ -25,6 +38,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         const others = await prisma.agreement.findMany({ where: { id: { not: agreementId }, type: "HIRE_AGREEMENT" as never, carId: ex.carId, driverId: ex.driverId, isActive: true, status: "SIGNED" as never } as never });
         if (others.length === 0) {
           await prisma.car.update({ where: { id: ex.carId }, data: { HIRE: false, driverProfileId: null, status: "AVAILABLE", updatedAt: now } as never });
+          await endInsuranceFor(ex.driverId, ex.carId, now);
           await prisma.driverprofile.update({ where: { id: ex.driverId }, data: { agreementSigned: false } as never }).catch(() => {});
           if (ex.driverprofile?.userId) await prisma.user.update({ where: { id: ex.driverprofile.userId }, data: { HIRE: false, updatedAt: now } as never }).catch(() => {});
         }
@@ -37,6 +51,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         const others = await prisma.agreement.findMany({ where: { id: { not: agreementId }, type: "RS_CAR_RENTAL" as never, carId: ex.carId, driverId: ex.driverId, isActive: true, status: "SIGNED" as never } as never });
         if (others.length === 0) {
           await prisma.car.update({ where: { id: ex.carId }, data: { RS_RENTAL: false, driverProfileId: null, status: "AVAILABLE", updatedAt: now } as never });
+          await endInsuranceFor(ex.driverId, ex.carId, now);
           await prisma.driverprofile.update({ where: { id: ex.driverId }, data: { agreementSigned: false } as never }).catch(() => {});
           if (ex.driverprofile?.userId) await prisma.user.update({ where: { id: ex.driverprofile.userId }, data: { RS_RENTAL: false, updatedAt: now } as never }).catch(() => {});
         }

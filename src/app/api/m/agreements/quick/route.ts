@@ -116,7 +116,7 @@ async function handle(g: { ok: true; user: { id: number } }, body: Record<string
         data: { status: (old.status === "DRAFT" ? "CANCELLED" : "TERMINATED") as never, isActive: false, terminatedAt: now, updatedAt: now } as never,
       });
       if (old.carId) {
-        await prisma.car.update({ where: { id: old.carId }, data: { HIRE: false, RS_RENTAL: false, driverProfileId: null, status: "AVAILABLE", updatedAt: now } as never }).catch(() => {});
+        await prisma.car.update({ where: { id: old.carId }, data: { HIRE: false, RS_RENTAL: false, INSURANCE_C: false, driverProfileId: null, status: "AVAILABLE", updatedAt: now } as never }).catch(() => {});
       }
       released.push(old.id);
       // An insurance certificate for the car being handed back no longer applies either.
@@ -186,7 +186,7 @@ async function insurance(g: { ok: true; user: { id: number } }, body: Record<str
     });
     policy = (prev?.insuranceNumber ?? "").trim();
   }
-  if (!policy) return NextResponse.json({ message: "Enter the insurance policy number", code: "NEEDS_POLICY" }, { status: 400 });
+  // No earlier certificate to copy the policy number from? Still create it — the number can be filled in when editing.
 
   const now = new Date();
   const start = body.startDate ? new Date(String(body.startDate)) : now;
@@ -196,8 +196,8 @@ async function insurance(g: { ok: true; user: { id: number } }, body: Record<str
   const row = await prisma.agreement.create({
     data: {
       type: "INSURANCE_CERTIFICATE" as never, title: `Insurance Certificate — ${c.registration} · ${name}`,
-      content: buildInsuranceContent({ vehicleReg: c.registration, makeModel: `${c.make} ${c.model}`.trim(), driverName: name, licenseNumber: dp.licenseNumber, address: [dp.address, dp.postcode].filter(Boolean).join(", "), startDate: day(start), endDate: day(end), policyNo: policy }),
-      driverId, carId, insuranceNumber: policy, startDate: start, endDate: end,
+      content: buildInsuranceContent({ vehicleReg: c.registration, makeModel: `${c.make} ${c.model}`.trim(), driverName: name, licenseNumber: dp.licenseNumber, address: [dp.address, dp.postcode].filter(Boolean).join(", "), startDate: day(start), endDate: day(end), policyNo: policy || "(to be added)" }),
+      driverId, carId, insuranceNumber: policy || null, startDate: start, endDate: end,
       status: (send ? "PENDING_SIGNATURE" : "DRAFT") as never, createdBy: g.user.id, updatedAt: now,
     } as never,
     include: { car: { select: carBasicSelect }, driverprofile: { include: driverUserInclude } },
@@ -214,5 +214,6 @@ async function insurance(g: { ok: true; user: { id: number } }, body: Record<str
   const missing: string[] = [];
   if (!dp.licenseNumber) missing.push("licence number");
   if (!dp.address) missing.push("address");
+  if (!policy) missing.push("insurance policy number");
   return NextResponse.json({ agreement: serializeAgreement(row as never), released: [], missing }, { status: 201 });
 }

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { writeBackAgreementDetails } from "../../../../../../lib/agreement-helpers";
+import { writeBackAgreementDetails, hireConflict, isHireKind } from "../../../../../../lib/agreement-helpers";
 import { prisma, requireUser, requireAdmin, driverProfileIdFor, serializeAgreement, driverUserInclude, carBasicSelect, fail, sendExpoPush, getTokensForUsers } from "../../../../../../lib/mobile-api";
 
 const inc = { car: { select: carBasicSelect }, driverprofile: { include: driverUserInclude } };
@@ -38,6 +38,26 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       Object.keys(body).some((k) => k !== "status")
     ) {
       return NextResponse.json({ message: `Agreement cannot be edited. Current status: "${current.status}".` }, { status: 400 });
+    }
+
+    // Hire / RS rental: one per driver and one per car. Re-check whenever the driver, car or type changes,
+    // or when a draft is about to be sent for signature.
+    {
+      const r = row as unknown as { type: string; driverId: number | null; carId: number | null };
+      const nextType = body.type !== undefined ? String(body.type) : r.type;
+      // The edit form always re-sends driverId/carId, so only react when they really differ.
+      const touches =
+        (body.driverId !== undefined && (body.driverId != null ? Number(body.driverId) : null) !== r.driverId) ||
+        (body.carId !== undefined && (body.carId != null ? Number(body.carId) : null) !== r.carId) ||
+        (body.type !== undefined && String(body.type) !== r.type) ||
+        body.status === "PENDING_SIGNATURE";
+      const ending = body.status === "CANCELLED" || body.status === "TERMINATED";
+      if (isHireKind(nextType) && touches && !ending) {
+        const nextDriver = body.driverId !== undefined ? (body.driverId != null ? Number(body.driverId) : null) : r.driverId;
+        const nextCar = body.carId !== undefined ? (body.carId != null ? Number(body.carId) : null) : r.carId;
+        const clash = await hireConflict(nextDriver, nextCar, Number(id));
+        if (clash) return NextResponse.json({ message: clash, code: "HIRE_CONFLICT" }, { status: 409 });
+      }
     }
 
     // A signed agreement can be corrected, but not moved to another driver/car — use the car swap for that
@@ -154,7 +174,23 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     if (!row) return NextResponse.json({ message: "Not found" }, { status: 404 });
     if (!["DRAFT", "CANCELLED"].includes((row as { status: string }).status))
       return NextResponse.json({ message: "Only DRAFT or CANCELLED agreements can be deleted" }, { status: 400 });
+    const r = row as unknown as { type: string; carId: number | null; driverId: number | null; status: string };
     await prisma.agreement.delete({ where: { id: Number(id) } });
+
+    // A deleted draft must not leave its car "reserved" for a driver who will never get it.
+    if (r.carId && r.status === "DRAFT") {
+      const now = new Date();
+      const live = ["DRAFT", "PENDING_SIGNATURE", "SIGNED"] as never[];
+      if (r.type === "HIRE_AGREEMENT" || r.type === "RS_CAR_RENTAL") {
+        const stillHired = await prisma.agreement.count({ where: { carId: r.carId, type: { in: ["HIRE_AGREEMENT", "RS_CAR_RENTAL"] as never[] }, status: { in: live } } as never });
+        if (stillHired === 0) {
+          await prisma.car.update({ where: { id: r.carId }, data: { HIRE: false, RS_RENTAL: false, driverProfileId: null, status: "AVAILABLE" as never, updatedAt: now } as never }).catch(() => {});
+        }
+      } else if (r.type === "INSURANCE_CERTIFICATE") {
+        const stillInsured = await prisma.agreement.count({ where: { carId: r.carId, type: "INSURANCE_CERTIFICATE" as never, status: { in: live } } as never });
+        if (stillInsured === 0) await prisma.car.update({ where: { id: r.carId }, data: { INSURANCE_C: false, updatedAt: now } as never }).catch(() => {});
+      }
+    }
     return NextResponse.json({ ok: true });
   } catch (err) { return fail("agreements/[id] DELETE", err); }
 }

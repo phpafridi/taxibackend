@@ -22,3 +22,31 @@ export async function writeBackAgreementDetails(
     if (bt) await prisma.car.update({ where: { id: carId }, data: { bodyType: bt, updatedAt: new Date() } as never }).catch(() => {});
   }
 }
+
+
+const HIRE_KINDS = ["HIRE_AGREEMENT", "RS_CAR_RENTAL"];
+export const isHireKind = (t: unknown) => typeof t === "string" && HIRE_KINDS.includes(t);
+
+/** A driver — and a car — can be on ONE Hire agreement or ONE RS car rental at a time (they are the same slot).
+ *  Returns a message if the pair would break that rule, or null if all is fine.
+ *  `signedOnly` checks against agreements already signed (used at signing time). */
+export async function hireConflict(
+  driverId: number | null, carId: number | null, excludeId?: number, signedOnly = false,
+): Promise<string | null> {
+  const status = { in: (signedOnly ? ["SIGNED"] : ["DRAFT", "PENDING_SIGNATURE", "SIGNED"]) as never[] };
+  const base = { type: { in: HIRE_KINDS as never[] }, status, ...(excludeId ? { id: { not: excludeId } } : {}) };
+  const label = (t: string) => (t === "RS_CAR_RENTAL" ? "RS car rental" : "hire agreement");
+  if (driverId) {
+    const other = await prisma.agreement.findFirst({
+      where: { ...base, driverId } as never, include: { car: { select: { registration: true } } },
+    }) as unknown as { type: string; car?: { registration: string } | null } | null;
+    if (other) return `This driver already has a ${label(other.type)}${other.car ? ` (${other.car.registration})` : ""}. A driver can only have one hire agreement or RS car rental at a time — use "swap car" to change their car.`;
+  }
+  if (carId) {
+    const other = await prisma.agreement.findFirst({
+      where: { ...base, carId, ...(driverId ? { NOT: { driverId } } : {}) } as never, include: { car: { select: { registration: true } } },
+    }) as unknown as { type: string; car?: { registration: string } | null } | null;
+    if (other) return `${other.car?.registration ?? "This car"} already has a ${label(other.type)} with another driver. A car can only be on one hire agreement or RS car rental at a time.`;
+  }
+  return null;
+}

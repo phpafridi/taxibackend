@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { writeBackAgreementDetails } from "../../../../../lib/agreement-helpers";
+import { writeBackAgreementDetails, hireConflict, isHireKind } from "../../../../../lib/agreement-helpers";
 import { prisma, requireUser, requireAdmin, driverProfileIdFor, pageParams, paginated, qstr, serializeAgreement, driverUserInclude, carBasicSelect, fail } from "../../../../../lib/mobile-api";
 
 const inc = { car: { select: carBasicSelect }, driverprofile: { include: driverUserInclude } };
@@ -30,6 +30,11 @@ export async function POST(req: Request) {
     const type = String(body.type);
     const driverId = body.driverId != null ? Number(body.driverId) : null;
     const carId = body.carId != null ? Number(body.carId) : null;
+
+    if (isHireKind(type)) {
+      const clash = await hireConflict(driverId, carId);
+      if (clash) return NextResponse.json({ message: clash, code: "HIRE_CONFLICT" }, { status: 409 });
+    }
 
     const row = await prisma.agreement.create({
       data: {

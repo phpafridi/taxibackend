@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import sharp from "sharp";
+import { hireConflict, isHireKind } from "../../../../../../../lib/agreement-helpers";
 import { prisma, requireUser, driverProfileIdFor, serializeAgreement, driverUserInclude, carBasicSelect, fail, sendExpoPush, getTokensForUsers } from "../../../../../../../lib/mobile-api";
 
 // The mobile app's signature pad outputs an SVG data-uri (data:image/svg+xml,<urlencoded xml>).
@@ -43,6 +44,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     if (g.user.role === "DRIVER") {
       const dpid = await driverProfileIdFor(g.user.id);
       if (dpid !== ag.driverId) return NextResponse.json({ message: "Not authorized to sign this agreement" }, { status: 403 });
+    }
+
+    // Never end up with two signed hire/rental agreements for the same driver or car.
+    if (isHireKind(ag.type)) {
+      const clash = await hireConflict(ag.driverId, ag.carId, agreementId, true);
+      if (clash) return NextResponse.json({ message: clash, code: "HIRE_CONFLICT" }, { status: 409 });
     }
 
     const now = new Date();

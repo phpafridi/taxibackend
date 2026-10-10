@@ -21,8 +21,10 @@ export async function GET(req: Request) {
     if (direction) listWhere.direction = direction;
     if (status) listWhere.status = status;
 
-    const creditWhere: Record<string, unknown> = { ...base, direction: "CREDIT" };
-    const debitWhere: Record<string, unknown> = { ...base, direction: "DEBIT" };
+    // Money totals ignore rejected entries (they never happened).
+    const live = { OR: [{ status: null }, { status: { not: "REJECTED" } }] };
+    const creditWhere: Record<string, unknown> = { ...base, direction: "CREDIT", ...live };
+    const debitWhere: Record<string, unknown> = { ...base, direction: "DEBIT", ...live };
 
     const [total, rows, creditAgg, debitAgg] = await Promise.all([
       prisma.ledger.count({ where: listWhere }),

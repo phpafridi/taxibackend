@@ -143,14 +143,19 @@ export async function toMobileUser(u: {
 }
 
 // ── prisma includes ───────────────────────────────────────────────────────────
+// Lists never carry the (large, base64) photo — they carry `avatarUrl` and the app fetches the image on demand.
 export const driverUserInclude = {
-  user_driverprofile_userIdTouser: { select: { name: true, email: true, phone: true, avatar: true } },
+  user_driverprofile_userIdTouser: { select: { name: true, email: true, phone: true, updatedAt: true } },
+} as const;
+// Use only where the raw photo is really needed (single application view, live tracker).
+export const driverUserIncludeWithAvatar = {
+  user_driverprofile_userIdTouser: { select: { name: true, email: true, phone: true, avatar: true, updatedAt: true } },
 } as const;
 export const carBasicSelect = { id: true, registration: true, model: true, make: true, year: true, bodyType: true } as const;
 
 // ── serializers ───────────────────────────────────────────────────────────────
 type AnyRec = Record<string, unknown>;
-type DriverUser = { name: string; email: string; phone: string | null; avatar: string | null };
+type DriverUser = { name: string; email: string; phone: string | null; avatar?: string | null; updatedAt?: Date };
 
 export function serializeDriverProfile(dp: AnyRec) {
   const u = (dp.user_driverprofile_userIdTouser as DriverUser) ?? { name: "", email: "", phone: null, avatar: null };
@@ -174,6 +179,7 @@ export function serializeDriverProfile(dp: AnyRec) {
     createdAt: isoReq(dp.createdAt as Date),
     user_driverprofile_userIdTouser: {
       name: u.name, email: u.email, phone: u.phone ?? undefined, avatar: u.avatar ?? undefined,
+      avatarUrl: `/api/m/images/user/${dp.userId as number}${u.updatedAt ? `?v=${new Date(u.updatedAt).getTime()}` : ""}`,
     },
   };
 }
@@ -189,6 +195,7 @@ export function serializeCar(car: AnyRec) {
     color: (car.color as string) ?? undefined,
     bodyType: (car.bodyType as string) ?? undefined,
     avatar: (car.avatar as string) ?? undefined,
+    avatarUrl: `/api/m/images/car/${car.id as number}${car.updatedAt ? `?v=${new Date(car.updatedAt as Date).getTime()}` : ""}`,
     purchasePrice: num(car.purchasePrice),
     currentValue: numU(car.currentValue),
     status: car.status as string,

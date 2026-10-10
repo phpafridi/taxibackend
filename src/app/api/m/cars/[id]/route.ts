@@ -5,10 +5,12 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   try {
     const g = await requireUser(req); if (!g.ok) return g.res;
     const { id } = await params;
-    const car = await prisma.car.findFirst({ where: { id: Number(id), deletedAt: null }, include: { driverprofile: { include: driverUserInclude } } });
+    const car = await prisma.car.findFirst({ where: { id: Number(id), deletedAt: null }, include: { driverprofile: { include: driverUserInclude } }, omit: { avatar: true } });
     if (!car) return NextResponse.json({ message: "Car not found" }, { status: 404 });
     if (g.user.role !== "ADMIN") { const dpid = await driverProfileIdFor(g.user.id); if ((car as { driverProfileId: number | null }).driverProfileId !== dpid) return NextResponse.json({ message: "Car not found" }, { status: 404 }); }
-    return NextResponse.json(serializeCar(car as never));
+    const out = serializeCar(car as never) as Record<string, unknown>;
+    if (g.user.role !== "ADMIN") { delete out.purchasePrice; delete out.currentValue; }
+    return NextResponse.json(out);
   } catch (err) { return fail("cars/[id]", err); }
 }
 
@@ -25,7 +27,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     if (body.isActive !== undefined) data.isActive = Boolean(body.isActive);
     if (body.HIRE !== undefined) data.HIRE = Boolean(body.HIRE);
     if (body.INSURANCE_C !== undefined) data.INSURANCE_C = Boolean(body.INSURANCE_C);
-    const car = await prisma.car.update({ where: { id: Number(id) }, data, include: { driverprofile: { include: driverUserInclude } } });
+    const car = await prisma.car.update({ where: { id: Number(id) }, data, include: { driverprofile: { include: driverUserInclude } }, omit: { avatar: true } });
     return NextResponse.json(serializeCar(car as never));
   } catch (err) { return fail("cars/[id]", err); }
 }

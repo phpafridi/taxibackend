@@ -6,7 +6,7 @@
 // is still listed, just with location: null, so admin can see who SHOULD
 // be trackable but isn't reporting yet.
 import { NextResponse } from "next/server";
-import { prisma, requireUser, requireAdmin, fail, driverUserInclude, carBasicSelect } from "../../../../../../lib/mobile-api";
+import { prisma, requireUser, requireAdmin, fail, driverUserIncludeWithAvatar, carBasicSelect } from "../../../../../../lib/mobile-api";
 
 export async function GET(req: Request) {
   try {
@@ -18,7 +18,7 @@ export async function GET(req: Request) {
         agreement: { some: { type: "HIRE_AGREEMENT" as never, status: "SIGNED" as never } },
       },
       include: {
-        ...driverUserInclude,
+        ...driverUserIncludeWithAvatar,
         driverlocation: true,
         car: { select: carBasicSelect },
       },

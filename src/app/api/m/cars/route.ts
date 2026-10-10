@@ -45,9 +45,10 @@ export async function GET(req: Request) {
     }
     const [total, cars] = await Promise.all([
       prisma.car.count({ where }),
-      prisma.car.findMany({ where, include: { driverprofile: { include: driverUserInclude } }, orderBy: { createdAt: "desc" }, skip, take: limit }),
+      prisma.car.findMany({ where, include: { driverprofile: { include: driverUserInclude } }, omit: { avatar: true }, orderBy: { createdAt: "desc" }, skip, take: limit }),
     ]);
-    return NextResponse.json(paginated(cars.map(serializeCar), total, page, limit));
+    const isAdm = g.user.role === "ADMIN";
+    return NextResponse.json(paginated(cars.map((c) => { const o = serializeCar(c as never) as Record<string, unknown>; if (!isAdm) { delete o.purchasePrice; delete o.currentValue; } return o; }) as never[], total, page, limit));
   } catch (err) { return fail("cars", err); }
 }
 
@@ -70,7 +71,7 @@ export async function POST(req: Request) {
         isActive: body.isActive != null ? Boolean(body.isActive) : true,
         HIRE: Boolean(body.HIRE), INSURANCE_C: Boolean(body.INSURANCE_C), updatedAt: new Date(),
       },
-      include: { driverprofile: { include: driverUserInclude } },
+      include: { driverprofile: { include: driverUserInclude } }, omit: { avatar: true },
     });
     return NextResponse.json(serializeCar(car as never), { status: 201 });
   } catch (err) { return fail("cars", err); }

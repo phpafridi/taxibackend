@@ -15,7 +15,7 @@ export async function GET(req: Request) {
     if (search) where.OR = [{ title: { contains: search } }, { description: { contains: search } }];
     const [total, rows] = await Promise.all([
       prisma.maintenancerequest.count({ where }),
-      prisma.maintenancerequest.findMany({ where, include: inc, orderBy: { createdAt: "desc" }, skip, take: limit }),
+      prisma.maintenancerequest.findMany({ where, include: { car: { select: carBasicSelect }, driverprofile: { include: driverUserInclude } }, orderBy: { createdAt: "desc" }, skip, take: limit }),
     ]);
     return NextResponse.json(paginated(rows.map(serializeMaintenance as never), total, page, limit));
   } catch (err) { return fail("maintenance", err); }

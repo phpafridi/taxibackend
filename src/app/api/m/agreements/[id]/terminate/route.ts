@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import { prisma, requireUser, requireAdmin, serializeAgreement, driverUserInclude, carBasicSelect, fail, sendExpoPush, getTokensForUsers } from "../../../../../../../lib/mobile-api";
+import { pinLedgerToCar } from "../../../../../../../lib/agreement-helpers";
 
 // When the car goes back to the pool, an insurance certificate for that driver + car no longer applies.
 async function endInsuranceFor(driverId: number, carId: number, now: Date) {
+  await pinLedgerToCar(prisma, driverId, carId);
   await prisma.agreement.updateMany({
     where: { driverId, carId, type: "INSURANCE_CERTIFICATE", status: { in: ["DRAFT", "PENDING_SIGNATURE"] } } as never,
     data: { status: "CANCELLED" as never, isActive: false, updatedAt: now } as never,

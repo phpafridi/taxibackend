@@ -50,3 +50,14 @@ export async function hireConflict(
   }
   return null;
 }
+
+
+/**
+ * When a driver hands a car back (swap / terminate), any of their ledger entries that were
+ * never tagged with a car belong to the car they were driving until now. Tag them so the
+ * history stays on the old car instead of jumping to the next one. The driver's own running
+ * balance is unaffected (it is per driver, not per car).
+ */
+export async function pinLedgerToCar(prismaClient: any, driverId: number, carId: number) {
+  await prismaClient.ledger.updateMany({ where: { driverId, carId: null }, data: { carId } }).catch(() => {});
+}

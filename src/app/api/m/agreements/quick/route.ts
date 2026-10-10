@@ -5,6 +5,7 @@
 import { NextResponse } from "next/server";
 import { prisma, requireUser, requireAdmin, serializeAgreement, driverUserInclude, carBasicSelect, fail, sendExpoPush, getTokensForUsers } from "../../../../../../lib/mobile-api";
 import { buildHireContent, buildInsuranceContent, HIRE_TERMS_SHORT } from "../../../../../../lib/agreement-template";
+import { pinLedgerToCar } from "../../../../../../lib/agreement-helpers";
 
 const LIVE = ["DRAFT", "PENDING_SIGNATURE", "SIGNED"] as never[];
 const HIRE_TYPES = ["HIRE_AGREEMENT", "RS_CAR_RENTAL"] as never[];
@@ -116,6 +117,7 @@ async function handle(g: { ok: true; user: { id: number } }, body: Record<string
         data: { status: (old.status === "DRAFT" ? "CANCELLED" : "TERMINATED") as never, isActive: false, terminatedAt: now, updatedAt: now } as never,
       });
       if (old.carId) {
+        await pinLedgerToCar(prisma, driverId, old.carId);
         await prisma.car.update({ where: { id: old.carId }, data: { HIRE: false, RS_RENTAL: false, INSURANCE_C: false, driverProfileId: null, status: "AVAILABLE", updatedAt: now } as never }).catch(() => {});
       }
       released.push(old.id);

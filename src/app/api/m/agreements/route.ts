@@ -14,9 +14,18 @@ export async function GET(req: Request) {
     if (g.user.role !== "ADMIN") { const dpid = await driverProfileIdFor(g.user.id); where.driverId = dpid ?? -1; }
     if (type) where.type = type;
     if (status) where.status = status;
+    const dFilter = Number(sp.get("driverId"));
+    if (g.user.role === "ADMIN" && Number.isInteger(dFilter) && dFilter > 0) where.driverId = dFilter;
+    const search = qstr(sp, "search");
+    if (search) where.OR = [
+      { title: { contains: search } },
+      { car: { is: { registration: { contains: search } } } },
+      { driverprofile: { is: { user_driverprofile_userIdTouser: { is: { name: { contains: search } } } } } },
+    ];
+    // The list never needs the full contract text or the signature image — they load on the detail screen.
     const [total, rows] = await Promise.all([
       prisma.agreement.count({ where }),
-      prisma.agreement.findMany({ where, include: inc, orderBy: { createdAt: "desc" }, skip, take: limit }),
+      prisma.agreement.findMany({ where, include: inc, omit: { content: true, signatureData: true }, orderBy: { createdAt: "desc" }, skip, take: limit }),
     ]);
     return NextResponse.json(paginated(rows.map(serializeAgreement as never), total, page, limit));
   } catch (err) { return fail("agreements", err); }

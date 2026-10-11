@@ -554,6 +554,8 @@ model user {
   HIRE                                         Boolean                 @default(false)
   INSURANCE_C                                  Boolean                 @default(false)
   RS_RENTAL                                    Boolean                 @default(false)
+  termsAcceptedAt                              DateTime?
+  termsVersion                                 String?                 @db.VarChar(20)
 
   FcmTokens          fcmToken[]     @relation("UserFcmTokens")
 

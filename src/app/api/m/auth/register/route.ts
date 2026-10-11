@@ -48,6 +48,8 @@ export async function POST(req: Request) {
   if (dateOfBirth && isNaN(dateOfBirth.getTime())) return NextResponse.json({ message: "Date of birth is not valid" }, { status: 400 });
   if (!address || !postcode) return NextResponse.json({ message: "Address and postcode are required" }, { status: 400 });
 
+  if (body.acceptedTerms !== true) return NextResponse.json({ message: "Please accept the Terms and Privacy Policy to continue" }, { status: 400 });
+
   const photos = (body.photos ?? {}) as Record<string, unknown>;
   if (!validImg(photos.licenseFront) || !validImg(photos.licenseBack))
     return NextResponse.json({ message: "Photos of the front and back of your driving licence are required" }, { status: 400 });
@@ -65,6 +67,7 @@ export async function POST(req: Request) {
       data: {
         name, email, phone, password: hashed, role: "DRIVER", isActive: false,
         avatar: photos.selfie as string, updatedAt: now,
+        termsAcceptedAt: now, termsVersion: "2026-10",
       } as never,
     });
     userId = user.id;

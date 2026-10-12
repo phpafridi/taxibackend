@@ -198,6 +198,13 @@ function SignInPage() {
                   </Button>
                 </div>
               </Form>
+              <p className="text-center text-muted small mt-4 mb-0">
+                <a href="/privacy" className="text-muted">Privacy Policy</a>
+                {" · "}
+                <a href="/terms" className="text-muted">Terms of Use</a>
+                {" · "}
+                <a href="/delete-account" className="text-muted">Delete your account</a>
+              </p>
             </CardBody>
           </Card>
         </Col>

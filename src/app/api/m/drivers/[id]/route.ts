@@ -34,7 +34,12 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     if (body.isVerified !== undefined) data.isVerified = Boolean(body.isVerified);
     if (body.licenseExpiry !== undefined) data.licenseExpiry = body.licenseExpiry ? new Date(String(body.licenseExpiry)) : null;
     if (body.dateOfBirth !== undefined) data.dateOfBirth = body.dateOfBirth ? new Date(String(body.dateOfBirth)) : null;
-    const dp = await prisma.driverprofile.update({ where: { id: Number(id) }, data, include: driverUserInclude });
+    const dp0 = await prisma.driverprofile.update({ where: { id: Number(id) }, data, include: driverUserInclude });
+    // Admin can set / replace / remove the driver's profile photo (stored on the user).
+    if (body.avatar !== undefined) {
+      await prisma.user.update({ where: { id: (dp0 as { userId: number }).userId }, data: { avatar: body.avatar ? String(body.avatar) : null, updatedAt: new Date() } as never });
+    }
+    const dp = body.avatar !== undefined ? await prisma.driverprofile.findUnique({ where: { id: Number(id) }, include: driverUserInclude }) : dp0;
     return NextResponse.json(serializeDriverProfile(dp as never));
   } catch (err) { return fail("drivers/[id]", err); }
 }

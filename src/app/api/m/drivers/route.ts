@@ -64,6 +64,7 @@ export async function POST(req: Request) {
       data: {
         name: String(body.name), email, password, role: "DRIVER",
         phone: body.phone != null ? String(body.phone) : null,
+        avatar: body.avatar ? String(body.avatar) : null,
         isActive: true, HIRE: Boolean(body.HIRE), INSURANCE_C: Boolean(body.INSURANCE_C), updatedAt: new Date(),
       },
     });

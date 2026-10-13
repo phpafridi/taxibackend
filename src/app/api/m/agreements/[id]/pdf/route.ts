@@ -5,6 +5,8 @@ import { NextResponse } from "next/server";
 import { prisma, requireUser, driverProfileIdFor, fail } from "../../../../../../../lib/mobile-api";
 import { createReadOnlyPDF, AgreementData } from "../../../../../../../lib/pdf-fill-service";
 import { createReadOnlyRSRentalPDF, RSRentalAgreementData } from "../../../../../../../lib/rs-rental-pdf-service";
+import { createInsuranceReadOnlyPDF, SimpleInsuranceData } from "../../../../../../../lib/insurance-pdf-service";
+import { stampKindFor, stampDateFor, stampPdfFile } from "../../../../../../../lib/pdf-stamp";
 import fs from "fs";
 import path from "path";
 
@@ -84,16 +86,44 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       } : null,
     };
 
-    const agreementsDir = path.join(process.cwd(), "public", "agreements", "read-only");
-    if (!fs.existsSync(agreementsDir)) fs.mkdirSync(agreementsDir, { recursive: true });
+    let outputPath: string;
+    let outputFileName: string;
 
-    const outputFileName = `READ_ONLY_Agreement_${agreementId}.pdf`;
-    const outputPath = path.join(agreementsDir, outputFileName);
-    if (ag.type === "RS_CAR_RENTAL") {
-      await createReadOnlyRSRentalPDF(agreementData, outputPath);
+    if (ag.type === "INSURANCE_CERTIFICATE") {
+      // Insurance certificates have their own template (same data the web's generate-insurance-pdf uses).
+      if (!ag.driverprofile || !ag.car) return NextResponse.json({ error: "This certificate has no driver or vehicle" }, { status: 400 });
+      const simple: SimpleInsuranceData = {
+        id: ag.id,
+        registration: ag.car.registration || "", vehicleMake: ag.car.make || "", vehicleModel: ag.car.model || "",
+        driverName: ag.driverprofile.user_driverprofile_userIdTouser.name || "",
+        driverLicenseNumber: ag.driverprofile.licenseNumber || "",
+        driverAddress: ag.driverprofile.address || "",
+        hireStartDate: ag.startDate?.toISOString() || new Date().toISOString(),
+        hireEndDate: ag.endDate?.toISOString() || new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+        signatureData: ag.signatureData, signedByName: ag.signedByName,
+        insuranceNumber: ag.insuranceNumber !== null ? ag.insuranceNumber : "",
+        issueDate: ag.createdAt?.toISOString() || new Date().toISOString(),
+      };
+      const dir = path.join(process.cwd(), "public", "insurance-certificates");
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      outputFileName = `Insurance_Certificate_${agreementId}.pdf`;
+      outputPath = path.join(dir, outputFileName);
+      await createInsuranceReadOnlyPDF(simple, outputPath);
     } else {
-      await createReadOnlyPDF(agreementData, outputPath);
+      const agreementsDir = path.join(process.cwd(), "public", "agreements", "read-only");
+      if (!fs.existsSync(agreementsDir)) fs.mkdirSync(agreementsDir, { recursive: true });
+      outputFileName = `READ_ONLY_Agreement_${agreementId}.pdf`;
+      outputPath = path.join(agreementsDir, outputFileName);
+      if (ag.type === "RS_CAR_RENTAL") {
+        await createReadOnlyRSRentalPDF(agreementData, outputPath);
+      } else {
+        await createReadOnlyPDF(agreementData, outputPath);
+      }
     }
+
+    // A terminated / expired document gets a big red stamp on every page.
+    const kind = stampKindFor(ag);
+    if (kind) await stampPdfFile(outputPath, kind, stampDateFor(kind, ag));
 
     const pdfBuffer = fs.readFileSync(outputPath);
     return new NextResponse(pdfBuffer, {

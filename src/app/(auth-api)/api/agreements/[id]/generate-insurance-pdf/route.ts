@@ -3,6 +3,7 @@ import { prisma } from '../../../../../../../lib/prisma';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '../../../../../../../lib/auth-config';
 import { createInsuranceReadOnlyPDF, SimpleInsuranceData } from '../../../../../../../lib/insurance-pdf-service';
+import { stampKindFor, stampDateFor, stampPdfFile } from '../../../../../../../lib/pdf-stamp';
 import fs from 'fs';
 import path from 'path';
 
@@ -102,6 +103,8 @@ export async function GET(
   
     
     await createInsuranceReadOnlyPDF(simpleData, outputPath);
+    const stamp = stampKindFor(agreement);
+    if (stamp) await stampPdfFile(outputPath, stamp, stampDateFor(stamp, agreement));
 
     // 7. Return the PDF file
     const pdfBuffer = fs.readFileSync(outputPath);

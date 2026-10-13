@@ -10,6 +10,35 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     if (g.user.role !== "ADMIN") { const dpid = await driverProfileIdFor(g.user.id); if ((car as { driverProfileId: number | null }).driverProfileId !== dpid) return NextResponse.json({ message: "Car not found" }, { status: 404 }); }
     const out = serializeCar(car as never) as Record<string, unknown>;
     if (g.user.role !== "ADMIN") { delete out.purchasePrice; delete out.currentValue; }
+
+    // The car's insurance IS its insurance certificate: the latest one a driver has signed (or that has since ended).
+    const cert = await prisma.agreement.findFirst({
+      where: { carId: Number(id), type: "INSURANCE_CERTIFICATE", status: { in: ["SIGNED", "EXPIRED", "TERMINATED"] } },
+      orderBy: [{ signedAt: "desc" }, { createdAt: "desc" }],
+      select: {
+        id: true, status: true, signedAt: true, signedByName: true, signatureData: true, startDate: true, endDate: true,
+        terminatedAt: true, insuranceNumber: true,
+        driverprofile: { select: { userId: true, user_driverprofile_userIdTouser: { select: { name: true, updatedAt: true } } } },
+      },
+    });
+    if (cert) {
+      const du = cert.driverprofile?.user_driverprofile_userIdTouser;
+      const pastEnd = cert.endDate ? new Date(cert.endDate) < new Date(new Date().toDateString()) : false;
+      out.insuranceCertificate = {
+        id: cert.id,
+        status: cert.status === "SIGNED" && pastEnd ? "EXPIRED" : cert.status,
+        signedAt: cert.signedAt ? cert.signedAt.toISOString() : undefined,
+        signedByName: cert.signedByName ?? du?.name ?? undefined,
+        signatureData: cert.signatureData ?? undefined,
+        startDate: cert.startDate ? cert.startDate.toISOString() : undefined,
+        endDate: cert.endDate ? cert.endDate.toISOString() : undefined,
+        terminatedAt: cert.terminatedAt ? cert.terminatedAt.toISOString() : undefined,
+        insuranceNumber: cert.insuranceNumber ?? undefined,
+        driverName: du?.name ?? undefined,
+        driverAvatarUrl: cert.driverprofile?.userId
+          ? `/api/m/images/user/${cert.driverprofile.userId}${du?.updatedAt ? `?v=${new Date(du.updatedAt).getTime()}` : ""}` : undefined,
+      };
+    }
     return NextResponse.json(out);
   } catch (err) { return fail("cars/[id]", err); }
 }

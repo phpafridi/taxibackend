@@ -21,6 +21,7 @@ export async function proxy(req: NextRequest) {
     "/privacy",
     "/terms",
     "/delete-account",
+    "/card/", // shared business card (public link)
     "/api/m",
     "/_next",
     "/sw.js",

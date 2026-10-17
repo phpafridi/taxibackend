@@ -702,3 +702,16 @@ model ledgerproof {
   image     String   @db.MediumText
   createdAt DateTime @default(now())
 }
+
+
+// Company branding images kept in the app: the client's letterhead (page background for typed letters) and the
+// business card (shared through a public link). One row per kind. Images are stored as base64 data-URIs, like photos.
+model brandasset {
+  id         Int      @id @default(autoincrement())
+  kind       String   @unique @db.VarChar(30)
+  image      String   @db.MediumText
+  meta       String?  @db.Text
+  shareToken String?  @unique @db.VarChar(64)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @default(now()) @updatedAt
+}

@@ -1,6 +1,7 @@
 // lib/letterhead.ts
-// Turns typed text into letters on the client's own letterhead (an uploaded image used as the page background).
-// The SAME layout is used for the in-app preview and for the PDF, so what you see is what you download.
+// Turns typed text into letters on the company letterhead. The header and footer are DRAWN from the contact details
+// the admin keeps in the app (no uploaded picture). The SAME layout is used for the in-app preview and for the PDF,
+// so what you see is what you download.
 import { PDFDocument, StandardFonts, rgb, type PDFFont } from "pdf-lib";
 
 export const PAGE_W = 595.28; // A4 in points
@@ -46,6 +47,35 @@ export function normaliseSettings(raw: unknown, base: LetterSettings = DEFAULT_S
   };
 }
 
+export type LetterProfile = {
+  companyName: string; tagline: string; address: string; phone: string; email: string; website: string; companyNumber: string; footerNote: string;
+};
+export const DEFAULT_PROFILE: LetterProfile = {
+  companyName: "RS Private Hire", tagline: "", address: "", phone: "", email: "", website: "rsphire.co.uk", companyNumber: "", footerNote: "",
+};
+const PROFILE_MAX: Record<keyof LetterProfile, number> = {
+  companyName: 60, tagline: 100, address: 200, phone: 40, email: 80, website: 80, companyNumber: 40, footerNote: 140,
+};
+
+/** Accepts anything and returns a safe, complete profile (trimmed, length-limited). Address may keep line breaks. */
+export function normaliseProfile(raw: unknown, base: LetterProfile = DEFAULT_PROFILE): LetterProfile {
+  const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const out = { ...base };
+  for (const k of Object.keys(PROFILE_MAX) as (keyof LetterProfile)[]) {
+    if (typeof r[k] === "string") {
+      const v = (r[k] as string).replace(/\r\n?/g, "\n").replace(/[\u0000-\u0008\u000b-\u001f\u007f\u2028\u2029]/g, "");
+      out[k] = (k === "address" ? v.split("\n").map((x) => x.trim()).filter(Boolean).join("\n") : v.replace(/\n/g, " ").trim()).slice(0, PROFILE_MAX[k]);
+    }
+  }
+  if (!out.companyName) out.companyName = base.companyName || DEFAULT_PROFILE.companyName;
+  return out;
+}
+
+// Page furniture, in points
+const HEADER_H = 78;
+const ACCENT_H = 4;
+export type LetterFrame = { headerH: number; accentH: number; name: string; tagline: string; footer: string[] };
+
 export type LetterLine = { t: string; y: number }; // y = text baseline, in points from the TOP of the page
 export type LetterLayout = {
   page: { w: number; h: number };
@@ -53,6 +83,7 @@ export type LetterLayout = {
   size: number;
   lineHeight: number;
   font: FontKey;
+  frame: LetterFrame;
   pages: { lines: LetterLine[] }[];
   replaced: number; // characters the PDF font cannot print (emoji, other alphabets) that were swapped for "?"
 };
@@ -108,14 +139,43 @@ function wrapParagraph(font: PDFFont, size: number, maxW: number, para: string):
   return lines;
 }
 
+const FOOT_SIZE = 8;
+const NAME_SIZE = 22;
+
+function fit(font: PDFFont, size: number, maxW: number, t: string): string {
+  if (font.widthOfTextAtSize(t, size) <= maxW) return t;
+  let n = t.length;
+  while (n > 1 && font.widthOfTextAtSize(t.slice(0, n) + "...", size) > maxW) n--;
+  return t.slice(0, n).trimEnd() + "...";
+}
+
+/** The words of the header and footer, already cut to fit the page (the app draws the same lines). */
+function buildFrame(p: LetterProfile, bold: PDFFont, small: PDFFont): LetterFrame {
+  const maxW = PAGE_W - 2 * 2.2 * CM;
+  const pr = (t: string, f: PDFFont) => toPrintable(t, f).text;
+  const l1 = pr(p.address.split("\n").filter(Boolean).join(", "), small);
+  const l2 = pr([p.phone && `Tel: ${p.phone}`, p.email && `Email: ${p.email}`, p.website].filter(Boolean).join("  |  "), small);
+  const l3 = pr([p.companyNumber && `Company No. ${p.companyNumber}`, p.footerNote].filter(Boolean).join("  |  "), small);
+  return {
+    headerH: HEADER_H,
+    accentH: ACCENT_H,
+    name: fit(bold, NAME_SIZE, maxW, pr(p.companyName, bold)),
+    tagline: fit(small, 10, maxW, pr(p.tagline, small)),
+    footer: [l1, l2, l3].filter(Boolean).map((l) => fit(small, FOOT_SIZE, maxW, l)),
+  };
+}
+
 export class LetterTooLongError extends Error {}
 
 /** Lays the text out on A4 pages inside the margins. Throws LetterTooLongError past the limits. */
-export async function layoutLetter(text: string, settings: LetterSettings, doc?: PDFDocument): Promise<{ layout: LetterLayout; doc: PDFDocument; font: PDFFont }> {
+export async function layoutLetter(text: string, settings: LetterSettings, profile: LetterProfile = DEFAULT_PROFILE, doc?: PDFDocument): Promise<{ layout: LetterLayout; doc: PDFDocument; font: PDFFont; bold: PDFFont; small: PDFFont }> {
   if (text.length > MAX_TEXT) throw new LetterTooLongError(`Letter is too long (max ${MAX_TEXT} characters).`);
   const d = doc ?? (await PDFDocument.create());
   const font = await d.embedFont(STD[settings.font]);
   const { text: printable, replaced } = toPrintable(cleanText(text), font);
+  const bold = await d.embedFont(StandardFonts.HelveticaBold);
+  const small = await d.embedFont(StandardFonts.Helvetica);
+  const frame = buildFrame(profile, bold, small);
 
   const size = settings.fontSize;
   const lineHeight = Math.round(size * 1.42 * 10) / 10;
@@ -141,46 +201,41 @@ export async function layoutLetter(text: string, settings: LetterSettings, doc?:
   pages.push({ lines: cur });
   if (pages.length > MAX_PAGES) throw new LetterTooLongError(`Letter is too long (max ${MAX_PAGES} pages).`);
 
-  return { layout: { page: { w: PAGE_W, h: PAGE_H }, left, size, lineHeight, font: settings.font, pages, replaced }, doc: d, font };
+  return { layout: { page: { w: PAGE_W, h: PAGE_H }, left, size, lineHeight, font: settings.font, frame, pages, replaced }, doc: d, font, bold, small };
 }
 
-/** Reads a "data:image/…;base64,…" string into bytes + type. */
-export function parseDataUri(raw: string): { mime: string; bytes: Buffer } | null {
-  const m = /^data:([^;,]+);base64,([\s\S]*)$/.exec(raw);
-  if (!m) return null;
-  const bytes = Buffer.from(m[2], "base64");
-  return bytes.length ? { mime: m[1].toLowerCase(), bytes } : null;
+/** Draws the header band and the footer on one page. y values are PDF points (origin bottom-left). */
+function drawFrame(page: import("pdf-lib").PDFPage, f: LetterFrame, bold: PDFFont, small: PDFFont) {
+  const left = 2.2 * CM;
+  page.drawRectangle({ x: 0, y: PAGE_H - f.headerH, width: PAGE_W, height: f.headerH, color: rgb(0.04, 0.04, 0.06) });
+  page.drawRectangle({ x: 0, y: PAGE_H - f.headerH - f.accentH, width: PAGE_W, height: f.accentH, color: rgb(1, 0.69, 0.125) });
+  page.drawText(f.name, { x: left, y: PAGE_H - (f.tagline ? 38 : 46), size: NAME_SIZE, font: bold, color: rgb(1, 1, 1) });
+  if (f.tagline) page.drawText(f.tagline, { x: left, y: PAGE_H - 58, size: 10, font: small, color: rgb(0.78, 0.78, 0.82) });
+  if (f.footer.length) {
+    const lineGap = 11;
+    const lastY = 22;
+    const topY = lastY + (f.footer.length - 1) * lineGap;
+    page.drawLine({ start: { x: left, y: topY + 14 }, end: { x: PAGE_W - left, y: topY + 14 }, thickness: 0.6, color: rgb(0.82, 0.82, 0.85) });
+    f.footer.forEach((t, i) => {
+      const w = small.widthOfTextAtSize(t, FOOT_SIZE);
+      page.drawText(t, { x: (PAGE_W - w) / 2, y: topY - i * lineGap, size: FOOT_SIZE, font: small, color: rgb(0.36, 0.36, 0.4) });
+    });
+  }
 }
 
-/** Can pdf-lib draw this image? Used to reject unreadable uploads up front (e.g. interlaced PNGs). */
-export async function canEmbedImage(mime: string, bytes: Buffer): Promise<boolean> {
-  try {
-    const d = await PDFDocument.create();
-    if (mime === "image/png") await d.embedPng(bytes); else await d.embedJpg(bytes);
-    return true;
-  } catch { return false; }
-}
-
-/** Builds the PDF: every page gets the letterhead as a full-page background, then the text on top. */
-export async function buildLetterPdf(letterhead: { mime: string; bytes: Buffer } | null, text: string, settings: LetterSettings): Promise<Uint8Array> {
-  const { layout, doc, font } = await layoutLetter(text, settings);
-  const img = letterhead ? (letterhead.mime === "image/png" ? await doc.embedPng(letterhead.bytes) : await doc.embedJpg(letterhead.bytes)) : null;
-
+/** Builds the PDF: every page gets the drawn letterhead (header + footer), then the text on top. */
+export async function buildLetterPdf(profile: LetterProfile, text: string, settings: LetterSettings): Promise<Uint8Array> {
+  const { layout, doc, font, bold, small } = await layoutLetter(text, settings, profile);
   for (const pg of layout.pages) {
     const page = doc.addPage([PAGE_W, PAGE_H]);
-    if (img) {
-      // "cover": fill the whole page, centred, without stretching the picture
-      const s = Math.max(PAGE_W / img.width, PAGE_H / img.height);
-      const w = img.width * s, h = img.height * s;
-      page.drawImage(img, { x: (PAGE_W - w) / 2, y: (PAGE_H - h) / 2, width: w, height: h });
-    }
+    drawFrame(page, layout.frame, bold, small);
     for (const ln of pg.lines) {
       if (ln.t === "") continue;
       page.drawText(ln.t, { x: layout.left, y: PAGE_H - ln.y, size: layout.size, font, color: rgb(0.09, 0.09, 0.1) });
     }
   }
   doc.setTitle("Letter");
-  doc.setCreator("RS Private Hire");
-  doc.setProducer("RS Private Hire");
+  doc.setCreator(profile.companyName);
+  doc.setProducer(profile.companyName);
   return doc.save();
 }

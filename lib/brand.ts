@@ -1,45 +1,42 @@
-// lib/brand.ts — shared helpers for the letterhead + business-card features.
-import crypto from "crypto";
+// lib/brand.ts — shared helpers for the letterhead feature + the status the app screens open with.
+//  • Letterhead contact details + font settings live in the existing `systemsetting` table (key "letterhead.config").
+//  • Typed letters are kept in the `savedletter` table.
+//  • The business card details + share link live in `systemsetting` too (see card.ts).
 import { prisma } from "./prisma";
-import { DEFAULT_SETTINGS, normaliseSettings, type LetterSettings } from "./letterhead";
+import { DEFAULT_PROFILE, DEFAULT_SETTINGS, normaliseProfile, normaliseSettings, type LetterProfile, type LetterSettings } from "./letterhead";
+import { readCard, shareUrlFor } from "./card";
 
-export const KIND_LETTERHEAD = "LETTERHEAD";
-export const KIND_CARD = "BUSINESS_CARD";
+const CONFIG_KEY = "letterhead.config";
 
-export const MAX_IMAGE_CHARS = 9_000_000; // ≈ 6.5 MB of image once decoded
+export type LetterConfig = { profile: LetterProfile; settings: LetterSettings };
 
-/** Public address of the site, used to build the business-card link. */
-export function siteBase(): string {
-  return (process.env.PUBLIC_BASE_URL || process.env.NEXTAUTH_URL || "https://rsphire.co.uk").trim().replace(/\/+$/, "");
+export async function readConfig(): Promise<LetterConfig> {
+  const row = await prisma.systemsetting.findUnique({ where: { key: CONFIG_KEY }, select: { value: true } });
+  let j: Record<string, unknown> = {};
+  try { j = row?.value ? JSON.parse(row.value) : {}; } catch { j = {}; }
+  return { profile: normaliseProfile(j.profile, DEFAULT_PROFILE), settings: normaliseSettings(j.settings, DEFAULT_SETTINGS) };
 }
 
-export function newShareToken(): string {
-  return crypto.randomBytes(18).toString("base64url"); // 24 URL-safe characters
+export async function saveConfig(cfg: LetterConfig, userId?: number | null): Promise<void> {
+  const value = JSON.stringify(cfg);
+  await prisma.systemsetting.upsert({
+    where: { key: CONFIG_KEY },
+    create: { key: CONFIG_KEY, value, group: "LETTERHEAD", type: "JSON", isPublic: false, createdBy: userId ?? null, updatedBy: userId ?? null, updatedAt: new Date() },
+    update: { value, updatedBy: userId ?? null, updatedAt: new Date() },
+  });
 }
-export const TOKEN_RE = /^[A-Za-z0-9_-]{16,64}$/;
 
-export function readSettings(meta: string | null | undefined): LetterSettings {
-  if (!meta) return DEFAULT_SETTINGS;
-  try { return normaliseSettings(JSON.parse(meta)); } catch { return DEFAULT_SETTINGS; }
-}
-
-/** Light read (no image) for status screens. */
+/** What the app needs to open the Letterhead / Business card screens. */
 export async function brandStatus() {
-  const rows = await prisma.brandasset.findMany({ select: { kind: true, meta: true, shareToken: true, updatedAt: true } });
-  const lh = rows.find((r: { kind: string }) => r.kind === KIND_LETTERHEAD);
-  const card = rows.find((r: { kind: string }) => r.kind === KIND_CARD);
+  const [cfg, card] = await Promise.all([readConfig(), readCard()]);
   return {
-    letterhead: {
-      exists: !!lh,
-      updatedAt: lh?.updatedAt?.toISOString(),
-      settings: readSettings(lh?.meta),
-      imageUrl: lh ? `/api/m/brand/image/letterhead?v=${lh.updatedAt.getTime()}` : undefined,
-    },
-    card: {
-      exists: !!card,
-      updatedAt: card?.updatedAt?.toISOString(),
-      imageUrl: card ? `/api/m/brand/image/card?v=${card.updatedAt.getTime()}` : undefined,
-      shareUrl: card?.shareToken ? `${siteBase()}/card/${card.shareToken}` : undefined,
-    },
+    letterhead: { profile: cfg.profile, settings: cfg.settings },
+    card: { profile: card.profile, shareUrl: shareUrlFor(card.shareToken) },
   };
+}
+
+/** A short title for a letter: its first non-empty line. */
+export function letterTitle(body: string): string {
+  const first = body.split(/\r?\n/).map((l) => l.trim()).find(Boolean) || "Letter";
+  return first.slice(0, 80);
 }

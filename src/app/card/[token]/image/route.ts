@@ -1,7 +1,7 @@
 // GET /card/<token>/image            — the business card picture (public, anyone with the link)
 // GET /card/<token>/image?download=1 — same, but as a file download
 import { NextResponse } from "next/server";
-import { prisma } from "../../../../../lib/prisma";
+import { brandStore } from "../../../../../lib/brandstore";
 import { KIND_CARD, TOKEN_RE } from "../../../../../lib/brand";
 import { parseDataUri } from "../../../../../lib/letterhead";
 
@@ -9,7 +9,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ token: s
   try {
     const { token } = await params;
     if (!TOKEN_RE.test(token)) return new NextResponse(null, { status: 404 });
-    const row = await prisma.brandasset.findFirst({ where: { kind: KIND_CARD, shareToken: token }, select: { image: true } });
+    const row = brandStore.byToken(KIND_CARD, token);
     const img = row ? parseDataUri(row.image) : null;
     if (!img) return new NextResponse(null, { status: 404 });
     const ext = img.mime === "image/png" ? "png" : img.mime === "image/webp" ? "webp" : "jpg";

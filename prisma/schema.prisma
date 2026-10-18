@@ -704,14 +704,14 @@ model ledgerproof {
 }
 
 
-// Company branding images kept in the app: the client's letterhead (page background for typed letters) and the
-// business card (shared through a public link). One row per kind. Images are stored as base64 data-URIs, like photos.
-model brandasset {
-  id         Int      @id @default(autoincrement())
-  kind       String   @unique @db.VarChar(30)
-  image      String   @db.MediumText
-  meta       String?  @db.Text
-  shareToken String?  @unique @db.VarChar(64)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @default(now()) @updatedAt
+// Letters the admin has typed and downloaded on the company letterhead (so the last ones can be opened again).
+model savedletter {
+  id          Int      @id @default(autoincrement())
+  title       String   @db.VarChar(200)
+  body        String   @db.MediumText
+  createdById Int?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
+
+  @@index([updatedAt], map: "SavedLetter_updatedAt_idx")
 }

@@ -2,10 +2,18 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { checkIpRateLimit, recordIpAttempt, clearIpAttempts } from "../../../../../../lib/rate-limiter";
-import { prisma, createMobileSession, toMobileUser } from "../../../../../../lib/mobile-api";
+import { prisma, createMobileSession, toMobileUser, fail } from "../../../../../../lib/mobile-api";
 import { checkLoginLockout, recordLoginFailure, recordLoginSuccess } from "../../../../../../lib/prisma";
 
 export async function POST(req: Request) {
+  try {
+    return await handleLogin(req);
+  } catch (err) {
+    return fail("auth/login", err); // shows the real cause (and logs it) instead of a bare HTTP 500
+  }
+}
+
+async function handleLogin(req: Request) {
   let body: { email?: string; password?: string };
   try {
     body = await req.json();

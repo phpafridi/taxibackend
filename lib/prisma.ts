@@ -83,15 +83,18 @@ function createPrismaClient() {
           // MySQL closes idle connections; the first query after a quiet spell can hit a dead one and fail with a
           // vague "unknown error". Try once more on a fresh connection — the failed attempt never reached the table.
           let result: unknown;
-          try {
-            result = await query(args);
-          } catch (err) {
+          const isTransient = (err: unknown) => {
             const e = err as { code?: string; message?: string };
-            const transient = ["P1001", "P1002", "P1008", "P1017", "P2024"].includes(e?.code ?? "")
+            return ["P1001", "P1002", "P1008", "P1017", "P2024"].includes(e?.code ?? "")
               || /unknown error|server has closed the connection|connection (was )?(reset|closed|lost)|ECONNRESET|ETIMEDOUT|EPIPE|socket/i.test(e?.message ?? "");
-            if (!transient) throw err;
-            await new Promise((r) => setTimeout(r, 250));
-            result = await query(args);
+          };
+          // Up to 3 tries: after a quiet spell several pooled connections can be dead at once, so one retry is not always enough.
+          for (let attempt = 1; ; attempt++) {
+            try { result = await query(args); break; }
+            catch (err) {
+              if (!isTransient(err) || attempt >= 3) throw err;
+              await new Promise((r) => setTimeout(r, attempt * 350));
+            }
           }
           try {
             if (model) afterWrite(model.toLowerCase(), operation, result);
@@ -110,6 +113,16 @@ export const prisma = globalForPrisma.prisma ?? createPrismaClient();
 // Cache on global in ALL environments (not just dev) so hot-reloads and
 // Railway's keep-alive restarts don't spawn extra pools.
 globalForPrisma.prisma = prisma;
+
+// Keep the database connections warm: a tiny query every 45 s stops MySQL from dropping idle connections,
+// which is what made the first request after a quiet spell (e.g. a login) fail with HTTP 500.
+const g2 = global as unknown as { prismaKeepAlive?: ReturnType<typeof setInterval> };
+if (!g2.prismaKeepAlive) {
+  g2.prismaKeepAlive = setInterval(() => {
+    (prisma as unknown as { $queryRaw: (s: TemplateStringsArray) => Promise<unknown> }).$queryRaw`SELECT 1`.catch(() => {});
+  }, 45_000);
+  g2.prismaKeepAlive.unref?.();
+}
 
 // ── Brute-force login protection ─────────────────────────────────────────────
 const MAX_FAILED_ATTEMPTS = 5;

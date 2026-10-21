@@ -7,7 +7,7 @@ import { getSessionUser, toMobileUser } from "../../../../../../lib/mobile-api";
 export async function GET(req: Request) {
   const user = await getSessionUser(req);
   if (!user) {
-    return NextResponse.json({ message: "Invalid or expired session" }, { status: 401 });
+    return NextResponse.json({ code: "SESSION_INVALID", message: "Invalid or expired session" }, { status: 401 });
   }
   return NextResponse.json({ user: await toMobileUser(user) });
 }

@@ -5,6 +5,7 @@
 import crypto from "crypto";
 import { NextResponse } from "next/server";
 import { prisma } from "./prisma";
+import { emitRealtime } from "./realtime";
 
 export { prisma };
 
@@ -93,6 +94,36 @@ export async function revokeMobileSession(token: string): Promise<void> {
     .catch(() => {});
 }
 
+/**
+ * One phone at a time: switch off every other signed-in phone for this user and return their tokens.
+ * Only phone sessions are touched (deviceInfo "mobile"), never the website's.
+ */
+export async function revokeOtherMobileSessions(userId: number): Promise<string[]> {
+  const where = { userId, isActive: true, deviceInfo: "mobile" };
+  const rows = await prisma.session.findMany({ where, select: { sessionToken: true } });
+  if (!rows.length) return [];
+  await prisma.session.updateMany({ where, data: { isActive: false } });
+  return rows.map((r: { sessionToken: string }) => r.sessionToken);
+}
+
+/** Forget every push-notification token of this user (a phone that signed out or was replaced must stop getting pushes). */
+export async function clearPushTokensForUser(userId: number): Promise<void> {
+  try {
+    const dp = await prisma.driverprofile.findUnique({ where: { userId }, select: { id: true } });
+    await prisma.fcmToken.deleteMany({
+      where: { OR: [{ userId }, ...(dp ? [{ driverId: (dp as { id: number }).id }] : [])] },
+    });
+  } catch (err) {
+    console.error("[mobile-api] clearPushTokensForUser failed:", err);
+  }
+}
+
+/** Tell the phones that were just replaced to sign out right now (they also find out on their next request). */
+export function notifySessionsRevoked(userId: number, revoked: string[]): void {
+  if (!revoked.length) return;
+  emitRealtime("session:revoked", { revoked, reason: "signed_in_elsewhere" }, { toUserId: userId });
+}
+
 export async function getSessionUser(req: Request) {
   try {
     const token = getBearerToken(req);
@@ -114,7 +145,9 @@ export type Guarded =
 
 export async function requireUser(req: Request): Promise<Guarded> {
   const user = await getSessionUser(req);
-  if (!user) return { ok: false, res: NextResponse.json({ message: "Unauthorized" }, { status: 401 }) };
+  // `code` lets the app tell "your login is no longer valid" (signed in on another device, expired) apart
+  // from other 401s such as a wrong current password.
+  if (!user) return { ok: false, res: NextResponse.json({ code: "SESSION_INVALID", message: "Unauthorized" }, { status: 401 }) };
   return { ok: true, user: user as never };
 }
 

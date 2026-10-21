@@ -93,6 +93,17 @@ function handleInternalEmit(req: http.IncomingMessage, res: http.ServerResponse)
       if (payload.toDriverId != null) io.to(`driver:${payload.toDriverId}`).emit(payload.event, payload.data);
       if (payload.toDrivers) io.to("drivers").emit(payload.event, payload.data);
 
+      // A phone that was replaced by a newer login: tell it, then cut its connection so it stops receiving live data.
+      if (payload.event === "session:revoked" && payload.toUserId != null) {
+        const dead = ((payload.data as { revoked?: string[] } | null)?.revoked) ?? [];
+        const room = `user:${payload.toUserId}`;
+        setTimeout(() => {
+          io.in(room).fetchSockets()
+            .then((list) => { for (const s of list) if (dead.includes(s.data.token)) s.disconnect(true); })
+            .catch(() => {});
+        }, 500);
+      }
+
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ ok: true }));
     } catch (err) {
@@ -129,6 +140,7 @@ io.use(async (socket, next) => {
     }
 
     socket.data.userId = session.user.id;
+    socket.data.token = token;
     socket.data.role = session.user.role;
     next();
   } catch (err) {

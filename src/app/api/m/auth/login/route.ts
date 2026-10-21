@@ -2,7 +2,7 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { checkIpRateLimit, recordIpAttempt, clearIpAttempts } from "../../../../../../lib/rate-limiter";
-import { prisma, createMobileSession, toMobileUser, fail } from "../../../../../../lib/mobile-api";
+import { prisma, createMobileSession, toMobileUser, fail, revokeOtherMobileSessions, clearPushTokensForUser, notifySessionsRevoked } from "../../../../../../lib/mobile-api";
 import { checkLoginLockout, recordLoginFailure, recordLoginSuccess } from "../../../../../../lib/prisma";
 
 export async function POST(req: Request) {
@@ -56,7 +56,13 @@ async function handleLogin(req: Request) {
   }
   await recordLoginSuccess(email);
 
+  // Only one phone can be signed in: end the old phone's login and forget its push-notification tokens.
+  // (The new phone registers its own token right after it signs in.)
+  const revoked = await revokeOtherMobileSessions(user.id);
+  if (revoked.length) await clearPushTokensForUser(user.id);
+
   const token = await createMobileSession(user.id, req);
+  notifySessionsRevoked(user.id, revoked);
   prisma.user.update({ where: { id: user.id }, data: { lastLogin: new Date() } }).catch(() => {});
 
   return NextResponse.json({ user: await toMobileUser(user), token });

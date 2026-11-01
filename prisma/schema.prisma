@@ -715,3 +715,30 @@ model savedletter {
 
   @@index([updatedAt], map: "SavedLetter_updatedAt_idx")
 }
+
+
+// Admin "Documents": files the admin saves for themselves, organised in tag folders (one folder per tag).
+model admintag {
+  id        Int        @id @default(autoincrement())
+  name      String     @unique(map: "AdminTag_name_key") @db.VarChar(80)
+  color     String     @default("#FF9500") @db.VarChar(20)
+  createdAt DateTime   @default(now())
+  docs      admindoc[]
+}
+
+model admindoc {
+  id          Int       @id @default(autoincrement())
+  name        String    @db.VarChar(255)
+  fileName    String    @db.VarChar(255)
+  mimeType    String    @db.VarChar(100)
+  size        Int
+  data        String    @db.LongText // file contents, base64 (no "data:" prefix)
+  tagId       Int?
+  createdById Int?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @default(now()) @updatedAt
+  tag         admintag? @relation(fields: [tagId], references: [id], onDelete: SetNull, map: "AdminDoc_tagId_fkey")
+
+  @@index([tagId], map: "AdminDoc_tagId_idx")
+  @@index([createdAt], map: "AdminDoc_createdAt_idx")
+}

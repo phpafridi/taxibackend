@@ -362,8 +362,9 @@ export function serializeLedger(l: AnyRec) {
   };
 }
 
-export function serializeNotification(n: AnyRec) {
+export function serializeNotification(n: AnyRec, route?: string | null) {
   return {
+    route: typeof route === "string" ? route : undefined,
     id: n.id as number,
     userId: (n.userId as number) ?? undefined,
     driverId: (n.driverId as number) ?? undefined,

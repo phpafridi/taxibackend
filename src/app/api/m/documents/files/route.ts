@@ -3,7 +3,7 @@
 import { NextResponse } from "next/server";
 import { prisma, requireUser, requireAdmin, fail } from "../../../../../../lib/mobile-api";
 
-export const MAX_BYTES = 8 * 1024 * 1024;
+export const MAX_BYTES = 40 * 1024 * 1024;
 const ALLOWED = new Set([
   "application/pdf", "image/jpeg", "image/png", "image/webp", "image/heic",
   "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -43,7 +43,7 @@ export async function POST(req: Request) {
     if (!data) return NextResponse.json({ message: "No file received" }, { status: 400 });
     if (!ALLOWED.has(mimeType)) return NextResponse.json({ message: "This file type is not supported. Use PDF, a photo, Word, Excel, CSV or text." }, { status: 415 });
     const size = Math.floor((data.length * 3) / 4) - (data.endsWith("==") ? 2 : data.endsWith("=") ? 1 : 0);
-    if (size > MAX_BYTES) return NextResponse.json({ message: "File is too large (maximum 8 MB)" }, { status: 413 });
+    if (size > MAX_BYTES) return NextResponse.json({ message: "File is too large (maximum 40 MB)" }, { status: 413 });
     let tagId: number | null = null;
     if (b.tagId !== undefined && b.tagId !== null && b.tagId !== "") {
       tagId = Number(b.tagId);

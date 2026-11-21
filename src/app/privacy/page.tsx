@@ -16,7 +16,7 @@ export default function Privacy() {
         <li><b>Account details:</b> name, email address, phone number, password (stored encrypted), profile photo.</li>
         <li><b>Driver details:</b> driving licence number and expiry, date of birth, home address and postcode, National Insurance number, emergency contact, and photos of your licence, proof of address and a photo of you.</li>
         <li><b>Agreements and payments:</b> hire, rental and insurance agreements (including your signature), weekly rent, deposits, payment records and receipt photos, maintenance requests and their photos.</li>
-        <li><b>Location:</b> while you have an active hire agreement, the app shares your phone’s location with your fleet manager while the app is open. The app does not collect location in the background. We do not collect location from drivers without an active hire. For managers, location is only used on their own phone to show where they are on the map; it is not sent to us or stored.</li>
+        <li><b>Location:</b> while you have an active hire agreement, the app shares your phone’s location with your fleet manager while the app is open. The app does not collect location in the background. We do not collect location from drivers without an active hire. For managers, location is only used on their own phone to show where they are on the live driver map; it is not sent to us or stored.</li>
         <li><b>Device information:</b> a push-notification token so we can send you rent reminders and fleet updates, and basic technical logs.</li>
       </ul>
 

@@ -10,6 +10,10 @@ import { stampKindFor, stampDateFor, stampPdfFile } from "../../../../../../../l
 import fs from "fs";
 import path from "path";
 
+
+// A deleted account has a placeholder login email — never print that on the agreement.
+const shownEmail = (e?: string | null) => (e && !e.endsWith("@deleted.invalid") ? e : "");
+
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const g = await requireUser(req);
@@ -49,7 +53,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       id: ag.id, title: ag.title, type: ag.type, status: ag.status,
       driver: ag.driverprofile ? {
         name: ag.driverprofile.user_driverprofile_userIdTouser.name || "",
-        email: ag.driverprofile.user_driverprofile_userIdTouser.email || "",
+        email: shownEmail(ag.driverprofile.user_driverprofile_userIdTouser.email),
         phone: ag.driverprofile.user_driverprofile_userIdTouser.phone || "",
         address: ag.driverprofile.address || "",
         postcode: ag.driverprofile.postcode || "",
@@ -82,7 +86,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       damageInScratch: ag.damageInScratch, damageInMissing: ag.damageInMissing,
       damageInChip: ag.damageInChip, damageInNotes: ag.damageInNotes,
       createdBy: ag.user_agreement_createdByTouser ? {
-        name: ag.user_agreement_createdByTouser.name || "", email: ag.user_agreement_createdByTouser.email || "",
+        name: ag.user_agreement_createdByTouser.name || "", email: shownEmail(ag.user_agreement_createdByTouser.email),
       } : null,
     };
 

@@ -113,6 +113,51 @@ function handleInternalEmit(req: http.IncomingMessage, res: http.ServerResponse)
   });
 }
 
+// ── "Open the app" reminder ────────────────────────────────────────────────
+// Location is only shared while the driver has the app open (no background location,
+// App Store 2.5.4). When a driver who is being tracked leaves the app, their phone's
+// connection drops; if it hasn't come back after a short grace period and tracking is
+// still on, we send them a push asking them to open the app again.
+const OPEN_APP_GRACE_MS = 60 * 1000;          // ignore quick app switches / network blips
+const OPEN_APP_COOLDOWN_MS = 15 * 60 * 1000;  // at most one reminder per driver per 15 min
+const lastOpenAppPush = new Map<number, number>();
+
+async function pushToDriver(userId: number, driverId: number, title: string, body: string, data: Record<string, unknown>) {
+  const rows = await rawPrisma.fcmToken.findMany({
+    where: { OR: [{ userId }, { driverId }] } as never,
+    select: { token: true },
+  });
+  const tokens = [...new Set(rows.map((r: { token: string }) => r.token))]
+    .filter((t) => t.startsWith("ExponentPushToken[") || t.startsWith("ExpoPushToken["));
+  if (!tokens.length) return;
+  await fetch("https://exp.host/--/api/v2/push/send", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(tokens.map((to) => ({ to, title, body, data, sound: "default", channelId: "default" }))),
+  });
+}
+
+function remindToOpenAppLater(userId: number, driverId: number) {
+  setTimeout(async () => {
+    try {
+      const back = await io.in(`user:${userId}`).fetchSockets();
+      if (back.length > 0) return;                                   // app is open again
+      const loc = await rawPrisma.driverlocation.findUnique({ where: { driverId }, select: { isTracked: true } });
+      if (!loc?.isTracked) return;                                   // nobody is watching
+      const last = lastOpenAppPush.get(driverId) ?? 0;
+      if (Date.now() - last < OPEN_APP_COOLDOWN_MS) return;
+      lastOpenAppPush.set(driverId, Date.now());
+      await pushToDriver(userId, driverId,
+        "Open RS Private Hire",
+        "Your fleet manager wants to see where your car is. Open the app to share your location.",
+        { type: "LOCATION_REQUEST" });
+      console.log(`[ws-server] open-app reminder sent: user=${userId} driver=${driverId}`);
+    } catch (err) {
+      console.error("[ws-server] open-app reminder failed:", err);
+    }
+  }, OPEN_APP_GRACE_MS);
+}
+
 // ── Socket.IO ───────────────────────────────────────────────────────────────
 const io = new SocketIOServer(httpServer, {
   path: "/socket.io",
@@ -212,8 +257,14 @@ io.on("connection", (socket) => {
 
   console.log(`[ws-server] connected: user=${userId} role=${role} (${io.engine.clientsCount} online)`);
 
-  socket.on("disconnect", () => {
+  socket.on("disconnect", (reason) => {
     console.log(`[ws-server] disconnected: user=${userId} (${io.engine.clientsCount} online)`);
+    // A driver left the app: if they're being tracked, remind them to come back.
+    // (Not for a phone signed out by a newer login, or a deliberate sign-out.)
+    const driverId = socket.data.driverId as number | undefined;
+    if (driverId && reason !== "server namespace disconnect" && reason !== "client namespace disconnect") {
+      remindToOpenAppLater(userId, driverId);
+    }
   });
 });
 

@@ -16,7 +16,7 @@ export default function Privacy() {
         <li><b>Account details:</b> name, email address, phone number, password (stored encrypted), profile photo.</li>
         <li><b>Driver details:</b> driving licence number and expiry, date of birth, home address and postcode, National Insurance number, emergency contact, and photos of your licence, proof of address and a photo of you.</li>
         <li><b>Agreements and payments:</b> hire, rental and insurance agreements (including your signature), weekly rent, deposits, payment records and receipt photos, maintenance requests and their photos.</li>
-        <li><b>Location:</b> while you have an active hire agreement, the app shares your phone’s location with your fleet manager, including in the background. We do not collect location from managers, or from drivers without an active hire.</li>
+        <li><b>Location:</b> while you have an active hire agreement, the app shares your phone’s location with your fleet manager while the app is open. The app does not collect location in the background. We do not collect location from managers, or from drivers without an active hire.</li>
         <li><b>Device information:</b> a push-notification token so we can send you rent reminders and fleet updates, and basic technical logs.</li>
       </ul>
 
@@ -38,17 +38,18 @@ export default function Privacy() {
 
       <H2>How long we keep it</H2>
       <p>
-        Application photos and personal details are kept while your account is active. If you delete your account, we erase
-        your personal details, photos, push token and location. We keep signed agreements and payment records for up to 6
-        years because UK law requires businesses to keep financial and contract records. Those records may still contain your
-        name as written in the agreement, but your account and login are closed. If your application was rejected, you can
+        Application photos and personal details are kept while your account is active. If you delete your account, your
+        login is closed and we erase your photos, push token and location. If you never signed an agreement, we also erase
+        your personal details. If you signed an agreement, we keep it and the details written on it (such as your name,
+        address and licence) together with payment records for up to 6 years, because UK law requires businesses to keep
+        contract and financial records. If your application was rejected, you can
         ask us to delete it by emailing us.
       </p>
 
       <H2>Your rights</H2>
       <p>
         You can ask to see, correct, export or delete your information, object to its use, or complain to the Information
-        Commissioner’s Office (ico.org.uk). You can delete your account in the app (Profile → Delete my account) or see{" "}
+        Commissioner’s Office (ico.org.uk). You can delete your account in the app (Me → Privacy &amp; data → Delete my account) or see{" "}
         <a href="/delete-account">how to delete your account</a>. You can also email {LEGAL.email}.
       </p>
 

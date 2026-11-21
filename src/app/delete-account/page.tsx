@@ -6,7 +6,7 @@ export default function DeleteAccount() {
   return (
     <LegalPage title="Delete your account">
       <H2>In the app</H2>
-      <p>Open the app → <b>Profile</b> → <b>Delete my account</b>, then enter your password to confirm.</p>
+      <p>Open the app → <b>Me</b> → <b>Privacy &amp; data</b> → <b>Delete my account</b>, then enter your password to confirm. Your account is deleted straight away.</p>
 
       <H2>By email</H2>
       <p>
@@ -16,20 +16,21 @@ export default function DeleteAccount() {
 
       <H2>What is deleted</H2>
       <ul>
-        <li>Your name, email, phone number, profile photo and login</li>
-        <li>Your licence details, date of birth, address, National Insurance number and emergency contact</li>
-        <li>Photos of your documents</li>
+        <li>Your login and email, and you are signed out on every device</li>
+        <li>Your profile photo and the photos of your documents</li>
         <li>Your push-notification token and location data</li>
       </ul>
 
       <H2>What we must keep</H2>
       <p>
         Signed agreements and payment records are kept for up to 6 years because UK law requires businesses to keep
-        contract and financial records. Your account and login are closed, but these records may still contain your name as written in the agreement.
+        contract and financial records. If you signed an agreement, the details written on it (such as your name, phone,
+        address, licence, date of birth, National Insurance number and emergency contact) are kept with it. If you never
+        signed an agreement, those personal details are deleted too.
       </p>
 
-      <H2>Before you delete</H2>
-      <p>If you still have an active agreement or a vehicle, your fleet manager must end it first.</p>
+      <H2>If you still have a car on hire</H2>
+      <p>You can still delete your account. Your fleet manager is told straight away so they can arrange the car&apos;s return and close the agreement.</p>
     </LegalPage>
   );
 }

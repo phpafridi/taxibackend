@@ -3,7 +3,7 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { randomBytes } from "crypto";
-import { prisma, requireUser, toMobileUser, driverProfileIdFor, serializeDriverProfile, driverUserInclude, fail } from "../../../../../lib/mobile-api";
+import { prisma, requireUser, toMobileUser, driverProfileIdFor, serializeDriverProfile, driverUserInclude, fail, sendExpoPush, getTokensForUsers } from "../../../../../lib/mobile-api";
 
 export async function GET(req: Request) {
   try {
@@ -33,9 +33,11 @@ export async function PUT(req: Request) {
 }
 
 // DELETE /api/m/profile  { password }
-// Deletes the signed-in person's account. Personal details, photos, push tokens and location are erased and the
-// login is closed. Signed agreements and ledger entries are kept (anonymised) because UK businesses must keep
-// financial and contract records. Blocked while the driver still has a live agreement or a car.
+// Deletes the signed-in person's account: the login is closed for good (email freed, password scrambled,
+// sessions + push tokens + location + uploaded photos/documents removed).
+// A driver who has SIGNED an agreement: that agreement is a legal contract the company must keep, and its PDF
+// is built from the driver's profile, so the details printed on it (name, phone, address, licence, date of
+// birth, NI, emergency contact) are kept with it. A driver who never signed anything is fully anonymised.
 export async function DELETE(req: Request) {
   try {
     const g = await requireUser(req); if (!g.ok) return g.res;
@@ -43,10 +45,20 @@ export async function DELETE(req: Request) {
     const password = body.password != null ? String(body.password) : "";
     const user = await prisma.user.findUnique({ where: { id: g.user.id } });
     if (!user) return NextResponse.json({ message: "User not found" }, { status: 404 });
-    if (user.role === "ADMIN")
-      return NextResponse.json({ message: "Manager accounts can't be deleted in the app. Please contact support." }, { status: 403 });
     if (!password || !(await bcrypt.compare(password, user.password)))
       return NextResponse.json({ message: "Password is incorrect" }, { status: 401 });
+
+    // App Store 5.1.1(v): every account can be deleted in the app.
+    // Only guard: the company must keep at least one manager, or nobody could run the fleet.
+    if (user.role === "ADMIN") {
+      const otherAdmins = await prisma.user.count({
+        where: { role: "ADMIN" as never, isActive: true, deletedAt: null, id: { not: user.id } } as never,
+      });
+      if (otherAdmins === 0)
+        return NextResponse.json({ message: "You are the only manager. Add another manager account first, then you can delete yours." }, { status: 409 });
+    }
+    let hadActiveHire = false;
+    let keepContractDetails = false;
 
     const now = new Date();
     const dp = await prisma.driverprofile.findUnique({ where: { userId: user.id }, select: { id: true } });
@@ -55,16 +67,20 @@ export async function DELETE(req: Request) {
         prisma.agreement.count({ where: { driverId: dp.id, status: { in: ["PENDING_SIGNATURE", "SIGNED"] as never[] } } as never }),
         prisma.car.count({ where: { driverProfileId: dp.id, deletedAt: null } as never }),
       ]);
-      if (liveAgreements > 0 || cars > 0)
-        return NextResponse.json({ message: "You still have an active agreement or a car. Ask your fleet manager to end it first, then delete your account." }, { status: 409 });
+      // An active hire no longer blocks deletion (Apple: no customer-service step).
+      // Signed agreements and payments stay on record (they keep the signer's name), and
+      // managers are told so they can arrange the car's return.
+      hadActiveHire = liveAgreements > 0 || cars > 0;
+      keepContractDetails = (await prisma.agreement.count({ where: { driverId: dp.id, signedAt: { not: null } } as never })) > 0;
 
-      await prisma.agreement.updateMany({ where: { driverId: dp.id, status: "DRAFT" } as never, data: { status: "CANCELLED", isActive: false, updatedAt: now } as never }).catch(() => {});
+      // Unsigned paperwork goes; signed agreements stay as the legal record.
+      await prisma.agreement.updateMany({ where: { driverId: dp.id, status: { in: ["DRAFT", "PENDING_SIGNATURE"] } } as never, data: { status: "CANCELLED", isActive: false, updatedAt: now } as never }).catch(() => {});
       await prisma.document.deleteMany({ where: { driverId: dp.id, maintenanceId: null, agreementId: null, carId: null, insuranceId: null } as never }).catch(() => {});
       await prisma.driverlocation.deleteMany({ where: { driverId: dp.id } as never }).catch(() => {});
       await prisma.fcmToken.deleteMany({ where: { OR: [{ userId: user.id }, { driverId: dp.id }] } as never }).catch(() => {});
       await prisma.driverprofile.update({
         where: { id: dp.id },
-        data: {
+        data: keepContractDetails ? { isActive: false, deletedAt: now, updatedAt: now } as never : {
           licenseNumber: null, licenseExpiry: null, driverNumber_licenseNumber: null, driverNumber_licenseExpiry: null,
           address: null, postcode: null, emergencyContact: null, emergencyPhone: null, dateOfBirth: null, nationalInsuranceNumber: null,
           isActive: false, deletedAt: now, updatedAt: now,
@@ -78,11 +94,32 @@ export async function DELETE(req: Request) {
     await prisma.user.update({
       where: { id: user.id },
       data: {
-        name: "Deleted user", email: `deleted-${user.id}-${now.getTime()}@deleted.invalid`, phone: null, avatar: null,
+        // Keep the name + phone printed on a signed agreement; otherwise erase them.
+        // (A manager's name is also kept: it is printed on the agreements they issued.)
+        name: keepContractDetails || user.role === "ADMIN" ? user.name : "Deleted user",
+        phone: keepContractDetails ? user.phone : null,
+        email: `deleted-${user.id}-${now.getTime()}@deleted.invalid`, avatar: null,
         password: await bcrypt.hash(randomBytes(24).toString("hex"), 10),
         isActive: false, deletedAt: now, updatedAt: now,
       } as never,
     });
+    // Tell the managers (best effort — never blocks the deletion).
+    try {
+      const who = user.name || "A user";
+      const title = user.role === "ADMIN" ? "Manager account deleted" : "Driver deleted their account";
+      const message = user.role === "ADMIN"
+        ? `${who} deleted their manager account.`
+        : hadActiveHire
+          ? `${who} deleted their account while they still had an active hire or car. Please arrange the car's return and end the agreement.`
+          : `${who} deleted their account.`;
+      const admins = await prisma.user.findMany({ where: { role: "ADMIN" as never, isActive: true, deletedAt: null, id: { not: user.id } } as never, select: { id: true } });
+      await Promise.all(admins.map((a: { id: number }) => prisma.notification.create({
+        data: { type: "SYSTEM" as never, priority: hadActiveHire ? "HIGH" : "MEDIUM", title, message, isForAdmin: true, userId: a.id, updatedAt: now } as never,
+      }).catch(() => {})));
+      const tokens = await getTokensForUsers(admins.map((a: { id: number }) => a.id));
+      await sendExpoPush(tokens, title, message, {});
+    } catch { /* best effort */ }
+
     return NextResponse.json({ success: true });
   } catch (err) { return fail("profile/delete", err); }
 }

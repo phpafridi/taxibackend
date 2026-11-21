@@ -42,7 +42,7 @@ export default function Terms() {
       </p>
 
       <H2>Ending your account</H2>
-      <p>You can delete your account at any time in the app once you have no active agreement or vehicle (see <a href="/delete-account">Delete your account</a>). We may suspend or close accounts that break these terms.</p>
+      <p>You can delete your account at any time in the app (see <a href="/delete-account">Delete your account</a>). We may suspend or close accounts that break these terms.</p>
 
       <H2>Changes, law and contact</H2>
       <p>We may update these terms and will ask you to accept the new version when the changes matter. These terms are governed by the law of England and Wales. Contact: {LEGAL.email}.</p>

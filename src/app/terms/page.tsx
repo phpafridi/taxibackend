@@ -29,7 +29,7 @@ export default function Terms() {
       </p>
 
       <H2>Location</H2>
-      <p>While you have an active hire, you agree that the app shares your location with your fleet manager as described in the Privacy Policy.</p>
+      <p>While you have an active hire, you agree that RS Private Hire managers can track the vehicle you hire using your phone&apos;s location while you use the app, as described in the Privacy Policy.</p>
 
       <H2>Acceptable use</H2>
       <p>Do not give false documents or information, share your account, try to access other people’s data, interfere with the service, or use it for anything unlawful.</p>

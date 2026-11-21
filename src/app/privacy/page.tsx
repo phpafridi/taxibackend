@@ -16,7 +16,7 @@ export default function Privacy() {
         <li><b>Account details:</b> name, email address, phone number, password (stored encrypted), profile photo.</li>
         <li><b>Driver details:</b> driving licence number and expiry, date of birth, home address and postcode, National Insurance number, emergency contact, and photos of your licence, proof of address and a photo of you.</li>
         <li><b>Agreements and payments:</b> hire, rental and insurance agreements (including your signature), weekly rent, deposits, payment records and receipt photos, maintenance requests and their photos.</li>
-        <li><b>Location:</b> while you have an active hire agreement, the app shares your phone’s location with your fleet manager while the app is open. The app does not collect location in the background. We do not collect location from drivers without an active hire. For managers, location is only used on their own phone to show where they are on the live driver map; it is not sent to us or stored.</li>
+        <li><b>Location:</b> drivers — while you have an active hire agreement, RS Private Hire managers use your phone&apos;s location to track the vehicle you hire. It is shared only while the app is open; the app does not collect location in the background. If a manager wants to see your vehicle&apos;s location while the app is closed, you get a notification and can tap it to open the app. Managers — your location is only used on your own phone to show you on the map and how far you are from the car you are tracking; it is not sent to us or stored. We do not collect location from drivers without an active hire.</li>
         <li><b>Device information:</b> a push-notification token so we can send you rent reminders and fleet updates, and basic technical logs.</li>
       </ul>
 
@@ -55,7 +55,7 @@ export default function Privacy() {
 
       <H2>Location in detail</H2>
       <p>
-        For drivers, location is used only so your fleet manager can see where the hired vehicle is, and only while the app is open. If you leave the app while your fleet manager is checking your car, you may get a notification asking you to open it again. You can turn off location in your
+        For drivers, location is used only so RS Private Hire managers can track the vehicle you hire, and only while the app is open. If a manager wants to see your vehicle&apos;s location while the app is closed, you get a notification: tap it to open the app and share the location. For managers, location only shows how far you are from the car on the map and stays on your phone. You can turn off location in your
         phone settings at any time. Doing so may stop us supporting your hire and may breach your agreement.
       </p>
 

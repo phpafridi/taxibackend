@@ -148,8 +148,8 @@ function remindToOpenAppLater(userId: number, driverId: number) {
       if (Date.now() - last < OPEN_APP_COOLDOWN_MS) return;
       lastOpenAppPush.set(driverId, Date.now());
       await pushToDriver(userId, driverId,
-        "Open RS Private Hire",
-        "Your fleet manager wants to see where your car is. Open the app to share your location.",
+        "Your manager wants your vehicle's location",
+        "Tap to open RS Private Hire and share your vehicle's location.",
         { type: "LOCATION_REQUEST" });
       console.log(`[ws-server] open-app reminder sent: user=${userId} driver=${driverId}`);
     } catch (err) {

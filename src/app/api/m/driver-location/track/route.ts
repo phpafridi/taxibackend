@@ -57,8 +57,8 @@ export async function PATCH(req: Request) {
         const tokens = await getTokensForUsers([driver.userId]);
         await sendExpoPush(
           tokens,
-          "Open RS Private Hire",
-          "Your fleet manager wants to see where your car is. Open the app to share your location.",
+          "Your manager wants your vehicle's location",
+          "Tap to open RS Private Hire and share your vehicle's location.",
           { type: "LOCATION_REQUEST" }
         );
       } catch (e) {

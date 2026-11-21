@@ -4,7 +4,7 @@ export const LEGAL = {
   company: "RS Private Hire",
   email: "support@rsphire.co.uk",
   address: "United Kingdom", // put your registered business address here
-  updated: "10 October 2026",
+  updated: "21 November 2026",
   version: "2026-10",
 };
 

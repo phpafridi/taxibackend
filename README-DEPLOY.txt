@@ -10,6 +10,7 @@ Files (copy over the same paths):
   src/app/privacy/page.tsx                       website: location only while app open; deletion text
   src/app/delete-account/page.tsx                website: Me -> Privacy & data path; active hire no longer blocks
   src/app/terms/page.tsx                         website: delete any time
+  src/components/legal/LegalPage.tsx             website: "Last updated 21 November 2026"
 
 Driver deletes account after signing an agreement:
  - Login closed for good (email freed, password scrambled, signed out everywhere,
